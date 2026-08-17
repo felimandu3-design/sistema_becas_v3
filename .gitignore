@@ -1,0 +1,17 @@
+# Dependencias y entornos
+/backend/vendor/
+/backend/node_modules/
+/backend/.env
+/node_modules/
+.env
+
+# Directorios de almacenamiento y caché de Laravel
+/backend/storage/*.key
+/backend/storage/logs/*
+/backend/storage/framework/cache/*
+/backend/storage/framework/sessions/*
+/backend/storage/framework/views/*
+
+# Docker y bases de datos locales
+docker-data/
+*.sql
