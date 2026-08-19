@@ -2,6 +2,12 @@
 import { computed, onMounted, ref } from 'vue'
 import api from '../api/axios'
 
+// 1. IMPORTAMOS LAS PIEZAS DEL ROMPECABEZAS (Componentes Hijos)
+import TabResumen from './Alumno/TabResumen.vue'
+import TabSolicitud from './Alumno/TabSolicitud.vue'
+import TabDocumentos from './Alumno/TabDocumentos.vue'
+import TabHistorial from './Alumno/TabHistorial.vue'
+
 const props = defineProps({
   usuario: {
     type: Object,
@@ -11,6 +17,7 @@ const props = defineProps({
 
 const emit = defineEmits(['cerrar-sesion'])
 
+// ESTADO GLOBAL
 const seccion = ref('resumen')
 const cargando = ref(true)
 const guardando = ref(false)
@@ -23,24 +30,6 @@ const solicitudActiva = ref(null)
 const solicitudes = ref([])
 const carreras = ref([])
 
-const formSolicitud = ref({
-  modalidad: '',
-  carrera_id: '',
-  grupo_id: '',
-  grupo: '',
-})
-
-const formDocumento = ref({
-  tipo: '',
-  archivo: null,
-})
-
-const modalidades = [
-  { value: 'DISCAPACIDAD', label: 'Discapacidad' },
-  { value: 'EXCELENCIA_ACADEMICA', label: 'Excelencia académica' },
-  { value: 'SITUACION_SOCIOECONOMICA', label: 'Situación socioeconómica' },
-]
-
 const tabs = [
   { id: 'resumen', label: 'Inicio' },
   { id: 'solicitud', label: 'Mi solicitud' },
@@ -48,6 +37,7 @@ const tabs = [
   { id: 'historial', label: 'Historial' },
 ]
 
+// UTILIDADES
 function unwrapArray(data) {
   if (Array.isArray(data)) return data
   if (Array.isArray(data?.data)) return data.data
@@ -74,68 +64,10 @@ function mostrarToast(mensaje, tipo = 'ok') {
 }
 
 function iniciales(nombre) {
-  return String(nombre || 'AL')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(x => x.charAt(0).toUpperCase())
-    .join('')
+  return String(nombre || 'AL').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(x => x.charAt(0).toUpperCase()).join('')
 }
 
-function fecha(valor) {
-  if (!valor) return '—'
-  const d = new Date(valor)
-  if (Number.isNaN(d.getTime())) return valor
-  return new Intl.DateTimeFormat('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(d)
-}
-
-function nombreEstado(valor) {
-  const v = String(valor || '').toUpperCase()
-  const mapa = {
-    BORRADOR: 'Borrador',
-    PENDIENTE: 'Pendiente',
-    EN_REVISION: 'En revisión',
-    DOCUMENTACION_INCOMPLETA: 'Documentación incompleta',
-    ACEPTADA: 'Aceptada',
-    APROBADA: 'Aprobada',
-    RECHAZADA: 'Rechazada',
-    CANCELADA: 'Cancelada',
-  }
-  return mapa[v] || valor || 'Sin estado'
-}
-
-function claseEstado(valor) {
-  const v = String(valor || '').toUpperCase()
-  if (['ACEPTADA', 'APROBADA'].includes(v)) return 'success'
-  if (['RECHAZADA', 'CANCELADA'].includes(v)) return 'danger'
-  if (v === 'EN_REVISION') return 'info'
-  if (v === 'DOCUMENTACION_INCOMPLETA') return 'purple'
-  if (['PENDIENTE', 'BORRADOR'].includes(v)) return 'warning'
-  return 'neutral'
-}
-
-function folio(s) {
-  return s?.folio || `BEC-${String(s?.id || 0).padStart(5, '0')}`
-}
-
-function modalidadLabel(valor) {
-  const item = modalidades.find(m => m.value === String(valor || '').toUpperCase())
-  return item?.label || valor || '—'
-}
-
-function urlArchivo(item) {
-  const ruta = item?.archivo_url || item?.url || item?.ruta || item?.archivo
-  if (!ruta) return null
-  if (String(ruta).startsWith('http')) return ruta
-  if (String(ruta).startsWith('/')) return `http://127.0.0.1:8000${ruta}`
-  return `http://127.0.0.1:8000/storage/${ruta}`
-}
-
+// PROPIEDADES COMPUTADAS GLOBALES
 const documentos = computed(() => {
   const s = solicitudActiva.value
   if (!s) return []
@@ -148,20 +80,16 @@ const progresoDocumentos = computed(() => {
   if (!solicitudActiva.value) return 0
   const total = documentos.value.length
   if (!total) return 15
-
   const validos = documentos.value.filter(d => {
     const e = String(d.estado || d.estatus || '').toUpperCase()
     return !['RECHAZADO', 'OBSERVADO', 'CORRECCION'].includes(e)
   }).length
-
   return Math.min(100, 35 + validos * 15)
 })
 
 const estadoActual = computed(() =>
   solicitudActiva.value?.estado || solicitudActiva.value?.estatus || 'SIN_SOLICITUD'
 )
-
-const puedeCrear = computed(() => !!convocatoria.value && !solicitudActiva.value)
 
 const convocatoriaAbierta = computed(() => {
   if (!convocatoria.value) return false
@@ -177,37 +105,10 @@ const convocatoriaAbierta = computed(() => {
     cierre.setHours(23, 59, 59, 999)
     if (hoy > cierre) return false
   }
-
   return true
 })
 
-const resumenCards = computed(() => [
-  {
-    titulo: 'Estado',
-    valor: solicitudActiva.value ? nombreEstado(estadoActual.value) : 'Sin solicitud',
-    detalle: solicitudActiva.value ? folio(solicitudActiva.value) : 'Puedes iniciar cuando haya convocatoria',
-    clase: claseEstado(estadoActual.value),
-  },
-  {
-    titulo: 'Documentos',
-    valor: documentos.value.length,
-    detalle: 'archivos cargados',
-    clase: 'info',
-  },
-  {
-    titulo: 'Modalidad',
-    valor: solicitudActiva.value ? modalidadLabel(solicitudActiva.value.modalidad) : '—',
-    detalle: 'modalidad registrada',
-    clase: 'purple',
-  },
-  {
-    titulo: 'Historial',
-    valor: solicitudes.value.length,
-    detalle: 'solicitudes registradas',
-    clase: 'neutral',
-  },
-])
-
+// FUNCIONES DE API
 async function cargarDatos() {
   cargando.value = true
   errorGeneral.value = ''
@@ -223,74 +124,40 @@ async function cargarDatos() {
 
   if (rConv.status === 'fulfilled') {
     convocatoria.value = unwrapObject(rConv.value.data, ['convocatoria'])
-  } else if (rConv.reason?.response?.status !== 404) {
-    console.error('Convocatoria:', rConv.reason)
   }
-
   if (rActiva.status === 'fulfilled') {
     solicitudActiva.value = unwrapObject(rActiva.value.data, ['solicitud'])
   } else if (rActiva.reason?.response?.status === 404) {
     solicitudActiva.value = null
-  } else {
-    console.error('Solicitud activa:', rActiva.reason)
   }
-
   if (rHistorial.status === 'fulfilled') {
     solicitudes.value = unwrapArray(rHistorial.value.data)
   }
-
   if (rCarreras.status === 'fulfilled') {
     carreras.value = unwrapArray(rCarreras.value.data)
   }
 
-  formSolicitud.value.carrera_id =
-    solicitudActiva.value?.carrera_id ||
-    props.usuario?.carrera_id ||
-    ''
-
-  formSolicitud.value.grupo_id =
-    solicitudActiva.value?.grupo_id ||
-    props.usuario?.grupo_id ||
-    ''
-
-  formSolicitud.value.grupo =
-    solicitudActiva.value?.grupo ||
-    props.usuario?.grupo ||
-    ''
-
-  const fallidosReales = resultados.filter(r =>
-    r.status === 'rejected' && r.reason?.response?.status !== 404
-  )
-
+  const fallidosReales = resultados.filter(r => r.status === 'rejected' && r.reason?.response?.status !== 404)
   if (fallidosReales.length === resultados.length) {
     errorGeneral.value = 'No fue posible conectar con el backend.'
   } else if (fallidosReales.length) {
     errorGeneral.value = 'Algunos datos no pudieron cargarse. Puedes actualizar el panel.'
   }
-
   cargando.value = false
 }
 
-async function crearSolicitud() {
+async function crearSolicitud(datosFormulario) {
   if (!convocatoria.value) {
     mostrarToast('No hay una convocatoria disponible.', 'error')
     return
   }
-
-  if (!formSolicitud.value.modalidad) {
-    mostrarToast('Selecciona una modalidad.', 'error')
-    return
-  }
-
   guardando.value = true
-
   try {
     const payload = {
       convocatoria_id: convocatoria.value.id,
-      modalidad: formSolicitud.value.modalidad,
-      carrera_id: formSolicitud.value.carrera_id || props.usuario?.carrera_id || null,
-      grupo_id: formSolicitud.value.grupo_id || props.usuario?.grupo_id || null,
-      grupo: formSolicitud.value.grupo || props.usuario?.grupo || null,
+      modalidad: datosFormulario.modalidad,
+      carrera_id: datosFormulario.carrera_id || props.usuario?.carrera_id || null,
+      grupo: datosFormulario.grupo || props.usuario?.grupo || null,
     }
 
     Object.keys(payload).forEach(k => {
@@ -305,66 +172,36 @@ async function crearSolicitud() {
     seccion.value = 'documentos'
   } catch (e) {
     const errores = e.response?.data?.errors
-    const primerError = errores
-      ? Object.values(errores).flat().filter(Boolean)[0]
-      : null
-
-    mostrarToast(
-      primerError ||
-      e.response?.data?.message ||
-      'No se pudo crear la solicitud.',
-      'error'
-    )
+    const primerError = errores ? Object.values(errores).flat().filter(Boolean)[0] : null
+    mostrarToast(primerError || e.response?.data?.message || 'No se pudo crear la solicitud.', 'error')
   } finally {
     guardando.value = false
   }
 }
 
-function seleccionarArchivo(evento) {
-  formDocumento.value.archivo = evento.target.files?.[0] || null
-}
-
-async function subirDocumento() {
+async function subirDocumento(datosDoc) {
   if (!solicitudActiva.value) {
     mostrarToast('Primero debes crear una solicitud.', 'error')
     return
   }
-
-  if (!formDocumento.value.tipo || !formDocumento.value.archivo) {
-    mostrarToast('Selecciona el tipo de documento y el archivo.', 'error')
-    return
-  }
-
   subiendo.value = true
-
   try {
     const fd = new FormData()
-    fd.append('archivo', formDocumento.value.archivo)
-    fd.append('tipo', formDocumento.value.tipo)
-    fd.append('tipo_documento', formDocumento.value.tipo)
-    fd.append('nombre', formDocumento.value.tipo)
+    fd.append('archivo', datosDoc.archivo)
+    fd.append('tipo', datosDoc.tipo)
+    fd.append('tipo_documento', datosDoc.tipo)
+    fd.append('nombre', datosDoc.tipo)
 
-    await api.post(
-      `/alumno/solicitudes/${solicitudActiva.value.id}/documentos`,
-      fd,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
-    )
+    await api.post(`/alumno/solicitudes/${solicitudActiva.value.id}/documentos`, fd, { 
+      headers: { 'Content-Type': 'multipart/form-data' } 
+    })
 
-    formDocumento.value = { tipo: '', archivo: null }
     mostrarToast('Documento cargado correctamente.')
     await cargarDatos()
   } catch (e) {
     const errores = e.response?.data?.errors
-    const primerError = errores
-      ? Object.values(errores).flat().filter(Boolean)[0]
-      : null
-
-    mostrarToast(
-      primerError ||
-      e.response?.data?.message ||
-      'No se pudo cargar el documento.',
-      'error'
-    )
+    const primerError = errores ? Object.values(errores).flat().filter(Boolean)[0] : null
+    mostrarToast(primerError || e.response?.data?.message || 'No se pudo cargar el documento.', 'error')
   } finally {
     subiendo.value = false
   }
@@ -438,521 +275,59 @@ onMounted(cargarDatos)
       </div>
 
       <template v-else>
-        <!-- RESUMEN -->
-        <section v-if="seccion === 'resumen'" class="space">
-          <div class="hero">
-            <div class="hero-copy">
-              <span class="eyebrow">PORTAL DEL ESTUDIANTE</span>
-              <h1>Hola, {{ usuario?.name?.split(' ')[0] || 'estudiante' }}</h1>
-              <p>
-                Consulta tu convocatoria, completa tu solicitud y da seguimiento
-                a tu proceso de beca desde un solo lugar.
-              </p>
+        <!-- AQUI SE INSERTAN LOS COMPONENTES HIJOS DEPENDIENDO LA PESTAÑA -->
+        
+        <TabResumen 
+          v-if="seccion === 'resumen'" 
+          :usuario="usuario"
+          :convocatoria="convocatoria"
+          :solicitudActiva="solicitudActiva"
+          :solicitudes="solicitudes"
+          :documentos="documentos"
+          :progresoDocumentos="progresoDocumentos"
+          :estadoActual="estadoActual"
+          @cambiar-seccion="seccion = $event"
+          @actualizar-datos="cargarDatos"
+        />
 
-              <div class="hero-actions">
-                <button
-                  v-if="puedeCrear && convocatoriaAbierta"
-                  class="primary-button"
-                  @click="seccion = 'solicitud'"
-                >
-                  Iniciar solicitud
-                </button>
-                <button
-                  v-else-if="solicitudActiva"
-                  class="primary-button"
-                  @click="seccion = 'solicitud'"
-                >
-                  Ver mi solicitud
-                </button>
-                <button class="soft-button" @click="cargarDatos">
-                  Actualizar
-                </button>
-              </div>
-            </div>
+        <TabSolicitud
+          v-if="seccion === 'solicitud'"
+          :usuario="usuario"
+          :convocatoria="convocatoria"
+          :convocatoriaAbierta="convocatoriaAbierta"
+          :solicitudActiva="solicitudActiva"
+          :estadoActual="estadoActual"
+          :carreras="carreras"
+          :guardando="guardando"
+          @cambiar-seccion="seccion = $event"
+          @submit-solicitud="crearSolicitud"
+        />
 
-            <div class="hero-status">
-              <span class="hero-status-label">PROCESO ACTUAL</span>
-              <strong v-if="solicitudActiva">
-                {{ nombreEstado(estadoActual) }}
-              </strong>
-              <strong v-else>Sin solicitud activa</strong>
+        <TabDocumentos
+          v-if="seccion === 'documentos'"
+          :solicitudActiva="solicitudActiva"
+          :documentos="documentos"
+          :progresoDocumentos="progresoDocumentos"
+          :subiendo="subiendo"
+          @cambiar-seccion="seccion = $event"
+          @subir-documento="subirDocumento"
+        />
 
-              <div class="progress-track">
-                <div
-                  class="progress-fill"
-                  :style="{ width: `${progresoDocumentos}%` }"
-                ></div>
-              </div>
-
-              <small>
-                {{ solicitudActiva
-                  ? `${progresoDocumentos}% de avance estimado`
-                  : 'Revisa la convocatoria vigente para comenzar' }}
-              </small>
-            </div>
-          </div>
-
-          <div class="kpis">
-            <article
-              v-for="card in resumenCards"
-              :key="card.titulo"
-              class="kpi"
-              :class="card.clase"
-            >
-              <span>{{ card.titulo }}</span>
-              <strong>{{ card.valor }}</strong>
-              <small>{{ card.detalle }}</small>
-            </article>
-          </div>
-
-          <div class="dashboard-grid">
-            <article class="panel convocatoria-card">
-              <div class="panel-heading">
-                <div>
-                  <span class="eyebrow">CONVOCATORIA</span>
-                  <h2>Convocatoria vigente</h2>
-                </div>
-                <span
-                  class="badge"
-                  :class="convocatoriaAbierta ? 'success' : 'neutral'"
-                >
-                  {{ convocatoriaAbierta ? 'Disponible' : 'No disponible' }}
-                </span>
-              </div>
-
-              <div v-if="convocatoria" class="convocatoria-content">
-                <h3>{{ convocatoria.nombre || convocatoria.titulo || 'Convocatoria de becas' }}</h3>
-                <p>
-                  {{ convocatoria.descripcion || 'Consulta las fechas y requisitos antes de registrar tu solicitud.' }}
-                </p>
-
-                <div class="details-grid">
-                  <div>
-                    <span>Inicio</span>
-                    <strong>{{ fecha(convocatoria.fecha_inicio) }}</strong>
-                  </div>
-                  <div>
-                    <span>Cierre</span>
-                    <strong>{{ fecha(convocatoria.fecha_cierre) }}</strong>
-                  </div>
-                  <div>
-                    <span>Periodo</span>
-                    <strong>{{ convocatoria.periodo?.nombre || '—' }}</strong>
-                  </div>
-                  <div>
-                    <span>Promedio mínimo</span>
-                    <strong>{{ convocatoria.promedio_minimo ?? 'Según modalidad' }}</strong>
-                  </div>
-                </div>
-              </div>
-
-              <div v-else class="empty-state compact">
-                <div class="empty-icon">◎</div>
-                <strong>No hay convocatoria vigente</strong>
-                <span>Cuando se publique una convocatoria aparecerá aquí.</span>
-              </div>
-            </article>
-
-            <article class="panel">
-              <div class="panel-heading">
-                <div>
-                  <span class="eyebrow">DATOS ACADÉMICOS</span>
-                  <h2>Mi información</h2>
-                </div>
-              </div>
-
-              <div class="student-info">
-                <div class="student-avatar">{{ iniciales(usuario?.name) }}</div>
-                <div class="student-name">
-                  <strong>{{ usuario?.name || 'Alumno' }}</strong>
-                  <span>{{ usuario?.email || '—' }}</span>
-                </div>
-
-                <div class="info-row">
-                  <span>Matrícula</span>
-                  <strong>{{ usuario?.matricula || '—' }}</strong>
-                </div>
-                <div class="info-row">
-                  <span>Carrera</span>
-                  <strong>{{ usuario?.carrera?.nombre || 'Asignada en tu perfil' }}</strong>
-                </div>
-                <div class="info-row">
-                  <span>Grupo</span>
-                  <strong>{{ usuario?.grupo?.nombre || usuario?.grupo || '—' }}</strong>
-                </div>
-              </div>
-            </article>
-          </div>
-
-          <article v-if="solicitudActiva" class="panel current-request">
-            <div class="panel-heading">
-              <div>
-                <span class="eyebrow">SEGUIMIENTO</span>
-                <h2>Tu solicitud actual</h2>
-              </div>
-              <span class="badge" :class="claseEstado(estadoActual)">
-                {{ nombreEstado(estadoActual) }}
-              </span>
-            </div>
-
-            <div class="request-summary">
-              <div>
-                <span>Folio</span>
-                <strong>{{ folio(solicitudActiva) }}</strong>
-              </div>
-              <div>
-                <span>Modalidad</span>
-                <strong>{{ modalidadLabel(solicitudActiva.modalidad) }}</strong>
-              </div>
-              <div>
-                <span>Fecha</span>
-                <strong>{{ fecha(solicitudActiva.created_at) }}</strong>
-              </div>
-              <div>
-                <span>Documentos</span>
-                <strong>{{ documentos.length }}</strong>
-              </div>
-            </div>
-          </article>
-        </section>
-
-        <!-- SOLICITUD -->
-        <section v-if="seccion === 'solicitud'" class="space">
-          <div class="section-heading">
-            <div>
-              <span class="eyebrow">TRÁMITE</span>
-              <h1>Mi solicitud</h1>
-              <p>Registra o consulta tu solicitud de apoyo.</p>
-            </div>
-          </div>
-
-          <article v-if="solicitudActiva" class="panel request-detail">
-            <div class="panel-heading">
-              <div>
-                <span class="eyebrow">{{ folio(solicitudActiva) }}</span>
-                <h2>Solicitud registrada</h2>
-              </div>
-              <span class="badge" :class="claseEstado(estadoActual)">
-                {{ nombreEstado(estadoActual) }}
-              </span>
-            </div>
-
-            <div class="request-summary large">
-              <div>
-                <span>Modalidad</span>
-                <strong>{{ modalidadLabel(solicitudActiva.modalidad) }}</strong>
-              </div>
-              <div>
-                <span>Carrera</span>
-                <strong>
-                  {{ solicitudActiva.carrera?.nombre || usuario?.carrera?.nombre || '—' }}
-                </strong>
-              </div>
-              <div>
-                <span>Grupo</span>
-                <strong>
-                  {{ solicitudActiva.grupo?.nombre || solicitudActiva.grupo || usuario?.grupo?.nombre || usuario?.grupo || '—' }}
-                </strong>
-              </div>
-              <div>
-                <span>Registrada</span>
-                <strong>{{ fecha(solicitudActiva.created_at) }}</strong>
-              </div>
-            </div>
-
-            <div
-              v-if="solicitudActiva.observaciones || solicitudActiva.comentarios"
-              class="observation"
-            >
-              <strong>Observaciones</strong>
-              <p>{{ solicitudActiva.observaciones || solicitudActiva.comentarios }}</p>
-            </div>
-
-            <div class="action-strip">
-              <div>
-                <strong>¿Te falta documentación?</strong>
-                <span>Puedes cargar archivos desde la sección Documentos.</span>
-              </div>
-              <button class="primary-button" @click="seccion = 'documentos'">
-                Ir a documentos
-              </button>
-            </div>
-          </article>
-
-          <article v-else class="panel form-panel">
-            <div class="panel-heading">
-              <div>
-                <span class="eyebrow">NUEVA SOLICITUD</span>
-                <h2>Selecciona tu modalidad</h2>
-              </div>
-            </div>
-
-            <div v-if="!convocatoria" class="empty-state">
-              <div class="empty-icon">⌛</div>
-              <strong>No hay convocatoria disponible</strong>
-              <span>No puedes crear una solicitud hasta que exista una convocatoria vigente.</span>
-            </div>
-
-            <div v-else-if="!convocatoriaAbierta" class="empty-state">
-              <div class="empty-icon">⊘</div>
-              <strong>La convocatoria no está abierta</strong>
-              <span>Revisa las fechas de apertura y cierre.</span>
-            </div>
-
-            <form v-else class="application-form" @submit.prevent="crearSolicitud">
-              <div class="conv-mini">
-                <span>Convocatoria</span>
-                <strong>{{ convocatoria.nombre || convocatoria.titulo }}</strong>
-                <small>
-                  {{ fecha(convocatoria.fecha_inicio) }} — {{ fecha(convocatoria.fecha_cierre) }}
-                </small>
-              </div>
-
-              <label class="field full">
-                <span>Modalidad *</span>
-                <select v-model="formSolicitud.modalidad" required>
-                  <option value="">Selecciona una modalidad</option>
-                  <option
-                    v-for="m in modalidades"
-                    :key="m.value"
-                    :value="m.value"
-                  >
-                    {{ m.label }}
-                  </option>
-                </select>
-              </label>
-
-              <label class="field">
-                <span>Carrera</span>
-                <select v-model="formSolicitud.carrera_id">
-                  <option value="">Usar carrera de mi perfil</option>
-                  <option v-for="c in carreras" :key="c.id" :value="c.id">
-                    {{ c.nombre }}
-                  </option>
-                </select>
-              </label>
-
-              <label class="field">
-                <span>Grupo</span>
-                <input
-                  v-model="formSolicitud.grupo"
-                  type="text"
-                  placeholder="Ej. 8A"
-                />
-              </label>
-
-              <div class="form-note full">
-                Al enviar la solicitud confirmas que la información registrada es correcta.
-              </div>
-
-              <div class="form-actions full">
-                <button
-                  type="submit"
-                  class="primary-button"
-                  :disabled="guardando"
-                >
-                  {{ guardando ? 'Registrando...' : 'Registrar solicitud' }}
-                </button>
-              </div>
-            </form>
-          </article>
-        </section>
-
-        <!-- DOCUMENTOS -->
-        <section v-if="seccion === 'documentos'" class="space">
-          <div class="section-heading">
-            <div>
-              <span class="eyebrow">EXPEDIENTE DIGITAL</span>
-              <h1>Documentos</h1>
-              <p>Adjunta los comprobantes correspondientes a tu modalidad.</p>
-            </div>
-          </div>
-
-          <div v-if="!solicitudActiva" class="panel empty-state">
-            <div class="empty-icon">▣</div>
-            <strong>Primero crea una solicitud</strong>
-            <span>Después podrás integrar tu expediente digital.</span>
-            <button class="primary-button" @click="seccion = 'solicitud'">
-              Ir a mi solicitud
-            </button>
-          </div>
-
-          <template v-else>
-            <div class="documents-grid">
-              <article class="panel upload-panel">
-                <div class="panel-heading">
-                  <div>
-                    <span class="eyebrow">NUEVO ARCHIVO</span>
-                    <h2>Cargar documento</h2>
-                  </div>
-                </div>
-
-                <form class="upload-form" @submit.prevent="subirDocumento">
-                  <label class="field">
-                    <span>Tipo de documento *</span>
-                    <select v-model="formDocumento.tipo" required>
-                      <option value="">Selecciona</option>
-                      <option value="HISTORIAL_ACADEMICO">Historial académico</option>
-                      <option value="CERTIFICADO_MEDICO">Certificado médico</option>
-                      <option value="COMPROBANTE_INGRESOS">Comprobante de ingresos</option>
-                      <option value="CONSTANCIA_INGRESOS">Constancia de ingresos</option>
-                      <option value="COMPROBANTE_DOMICILIO">Comprobante de domicilio</option>
-                      <option value="IDENTIFICACION">Identificación</option>
-                      <option value="OTRO">Otro documento</option>
-                    </select>
-                  </label>
-
-                  <label class="file-drop">
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      @change="seleccionarArchivo"
-                    />
-                    <span class="file-icon">↑</span>
-                    <strong>
-                      {{ formDocumento.archivo?.name || 'Seleccionar archivo' }}
-                    </strong>
-                    <small>PDF, JPG o PNG</small>
-                  </label>
-
-                  <button
-                    type="submit"
-                    class="primary-button"
-                    :disabled="subiendo"
-                  >
-                    {{ subiendo ? 'Subiendo...' : 'Subir documento' }}
-                  </button>
-                </form>
-              </article>
-
-              <article class="panel">
-                <div class="panel-heading">
-                  <div>
-                    <span class="eyebrow">AVANCE</span>
-                    <h2>Expediente</h2>
-                  </div>
-                  <strong class="progress-number">{{ progresoDocumentos }}%</strong>
-                </div>
-
-                <div class="progress-card">
-                  <div class="progress-track big">
-                    <div
-                      class="progress-fill"
-                      :style="{ width: `${progresoDocumentos}%` }"
-                    ></div>
-                  </div>
-                  <p>
-                    Mantén tus documentos completos y legibles para evitar observaciones.
-                  </p>
-                </div>
-              </article>
-            </div>
-
-            <article class="panel">
-              <div class="panel-heading">
-                <div>
-                  <span class="eyebrow">ARCHIVOS</span>
-                  <h2>Documentos cargados</h2>
-                </div>
-                <span class="count-badge">{{ documentos.length }}</span>
-              </div>
-
-              <div v-if="documentos.length" class="document-list">
-                <div
-                  v-for="doc in documentos"
-                  :key="doc.id"
-                  class="document-row"
-                >
-                  <div class="document-icon">PDF</div>
-                  <div class="document-main">
-                    <strong>
-                      {{ doc.nombre || doc.tipo_documento || doc.tipo || 'Documento' }}
-                    </strong>
-                    <span>{{ fecha(doc.created_at) }}</span>
-                  </div>
-                  <span
-                    class="badge"
-                    :class="claseEstado(doc.estado || doc.estatus)"
-                  >
-                    {{ nombreEstado(doc.estado || doc.estatus || 'CARGADO') }}
-                  </span>
-                  <a
-                    v-if="urlArchivo(doc)"
-                    :href="urlArchivo(doc)"
-                    target="_blank"
-                    rel="noopener"
-                    class="text-button"
-                  >
-                    Ver
-                  </a>
-                </div>
-              </div>
-
-              <div v-else class="empty-state compact">
-                <div class="empty-icon">□</div>
-                <strong>Aún no has cargado documentos</strong>
-                <span>Usa el formulario de arriba para comenzar.</span>
-              </div>
-            </article>
-          </template>
-        </section>
-
-        <!-- HISTORIAL -->
-        <section v-if="seccion === 'historial'" class="space">
-          <div class="section-heading">
-            <div>
-              <span class="eyebrow">SEGUIMIENTO</span>
-              <h1>Historial de solicitudes</h1>
-              <p>Consulta tus trámites anteriores y su resultado.</p>
-            </div>
-          </div>
-
-          <article class="panel">
-            <div v-if="solicitudes.length" class="history-list">
-              <div
-                v-for="s in solicitudes"
-                :key="s.id"
-                class="history-row"
-              >
-                <div class="history-folio">
-                  <span>Folio</span>
-                  <strong>{{ folio(s) }}</strong>
-                </div>
-
-                <div>
-                  <span>Convocatoria</span>
-                  <strong>{{ s.convocatoria?.nombre || 'Convocatoria' }}</strong>
-                </div>
-
-                <div>
-                  <span>Modalidad</span>
-                  <strong>{{ modalidadLabel(s.modalidad) }}</strong>
-                </div>
-
-                <div>
-                  <span>Fecha</span>
-                  <strong>{{ fecha(s.created_at) }}</strong>
-                </div>
-
-                <span class="badge" :class="claseEstado(s.estado || s.estatus)">
-                  {{ nombreEstado(s.estado || s.estatus) }}
-                </span>
-              </div>
-            </div>
-
-            <div v-else class="empty-state">
-              <div class="empty-icon">↺</div>
-              <strong>Sin historial todavía</strong>
-              <span>Tus solicitudes aparecerán aquí.</span>
-            </div>
-          </article>
-        </section>
+        <TabHistorial
+          v-if="seccion === 'historial'"
+          :solicitudes="solicitudes"
+        />
+        
       </template>
     </main>
   </div>
 </template>
 
-<style scoped>
+<style>
+/* 
+  NOTA IMPORTANTE: Le quitamos la palabra "scoped" a esta etiqueta style 
+  para que las clases CSS afecten también a los componentes hijos que acabamos de crear.
+*/
 * {
   box-sizing: border-box;
 }
@@ -1117,9 +492,7 @@ onMounted(cargarDatos)
   align-items: stretch;
   overflow: hidden;
   border-radius: 22px;
-  background:
-    radial-gradient(circle at 90% 10%, rgba(255,255,255,.11), transparent 28%),
-    linear-gradient(135deg, #0f6f45 0%, #0a5d39 55%, #084c31 100%);
+  background: radial-gradient(circle at 90% 10%, rgba(255,255,255,.11), transparent 28%), linear-gradient(135deg, #0f6f45 0%, #0a5d39 55%, #084c31 100%);
   color: white;
   box-shadow: 0 18px 40px rgba(12,83,51,.13);
 }
@@ -1666,30 +1039,11 @@ onMounted(cargarDatos)
   white-space: nowrap;
 }
 
-.badge.success {
-  background: #e8f5ed;
-  color: #147a4a;
-}
-
-.badge.warning {
-  background: #fff4da;
-  color: #956910;
-}
-
-.badge.info {
-  background: #e9f3fa;
-  color: #2e6f98;
-}
-
-.badge.purple {
-  background: #f1ebf8;
-  color: #71519a;
-}
-
-.badge.danger {
-  background: #f9e9ed;
-  color: #9a3149;
-}
+.badge.success { background: #e8f5ed; color: #147a4a; }
+.badge.warning { background: #fff4da; color: #956910; }
+.badge.info { background: #e9f3fa; color: #2e6f98; }
+.badge.purple { background: #f1ebf8; color: #71519a; }
+.badge.danger { background: #f9e9ed; color: #9a3149; }
 
 .count-badge {
   display: grid;
@@ -1723,14 +1077,8 @@ onMounted(cargarDatos)
   box-shadow: 0 6px 14px rgba(20,122,74,.17);
 }
 
-.primary-button:hover {
-  background: #106d41;
-}
-
-.primary-button:disabled {
-  cursor: not-allowed;
-  opacity: .55;
-}
+.primary-button:hover { background: #106d41; }
+.primary-button:disabled { cursor: not-allowed; opacity: .55; }
 
 .soft-button {
   border: 1px solid #dfe4e1;
@@ -1755,13 +1103,8 @@ onMounted(cargarDatos)
   text-align: center;
 }
 
-.empty-state.compact {
-  min-height: 190px;
-}
-
-.empty-state .primary-button {
-  margin-top: 16px;
-}
+.empty-state.compact { min-height: 190px; }
+.empty-state .primary-button { margin-top: 16px; }
 
 .empty-icon {
   display: grid;
@@ -1775,10 +1118,7 @@ onMounted(cargarDatos)
   font-size: 23px;
 }
 
-.empty-state strong {
-  font-size: 12px;
-}
-
+.empty-state strong { font-size: 12px; }
 .empty-state span {
   max-width: 390px;
   margin-top: 5px;
@@ -1800,25 +1140,10 @@ onMounted(cargarDatos)
 }
 
 .warning-banner strong,
-.warning-banner span {
-  display: block;
-}
-
-.warning-banner strong {
-  color: #8f6615;
-  font-size: 9px;
-}
-
-.warning-banner span {
-  margin-top: 2px;
-  color: #8b8069;
-  font-size: 8px;
-}
-
-.warning-banner button {
-  background: #f5e8ca;
-  color: #7f5d17;
-}
+.warning-banner span { display: block; }
+.warning-banner strong { color: #8f6615; font-size: 9px; }
+.warning-banner span { margin-top: 2px; color: #8b8069; font-size: 8px; }
+.warning-banner button { background: #f5e8ca; color: #7f5d17; }
 
 .loading-card {
   min-height: 360px;
@@ -1841,15 +1166,8 @@ onMounted(cargarDatos)
   animation: spin .8s linear infinite;
 }
 
-.loading-card strong {
-  font-size: 11px;
-}
-
-.loading-card span {
-  margin-top: 4px;
-  color: #9aa19d;
-  font-size: 8px;
-}
+.loading-card strong { font-size: 11px; }
+.loading-card span { margin-top: 4px; color: #9aa19d; font-size: 8px; }
 
 .toast {
   position: fixed;
@@ -1866,135 +1184,50 @@ onMounted(cargarDatos)
   font-weight: 750;
 }
 
-.toast.error {
-  background: #8e2843;
-}
+.toast.error { background: #8e2843; }
 
 .toast-enter-active,
-.toast-leave-active {
-  transition: .2s ease;
-}
-
+.toast-leave-active { transition: .2s ease; }
 .toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
+.toast-leave-to { opacity: 0; transform: translateY(-8px); }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
 @media (max-width: 1050px) {
-  .topbar-inner {
-    grid-template-columns: 1fr auto;
-  }
-
+  .topbar-inner { grid-template-columns: 1fr auto; }
   .nav {
     order: 3;
     grid-column: 1 / -1;
     justify-content: center;
     margin-bottom: 10px;
   }
-
-  .hero,
-  .dashboard-grid,
-  .documents-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-status {
-    border-left: 0;
-    border-top: 1px solid rgba(255,255,255,.1);
-  }
-
-  .kpis {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  .hero, .dashboard-grid, .documents-grid { grid-template-columns: 1fr; }
+  .hero-status { border-left: 0; border-top: 1px solid rgba(255,255,255,.1); }
+  .kpis { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 720px) {
-  .topbar-inner,
-  .main {
-    width: min(100% - 22px, 1240px);
-  }
-
-  .brand-copy {
-    display: none;
-  }
-
-  .profile-copy {
-    display: none;
-  }
-
-  .nav {
-    overflow-x: auto;
-    justify-content: flex-start;
-  }
-
-  .nav button {
-    white-space: nowrap;
-  }
-
-  .hero-copy,
-  .hero-status {
-    padding: 25px 22px;
-  }
-
-  .kpis {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .details-grid,
-  .request-summary,
-  .application-form {
-    grid-template-columns: 1fr;
-  }
-
-  .application-form .full,
-  .conv-mini {
-    grid-column: auto;
-  }
-
-  .history-row {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .history-row .badge {
-    grid-column: 1 / -1;
-  }
-
-  .document-row {
-    grid-template-columns: auto 1fr;
-  }
-
-  .document-row .badge,
-  .document-row .text-button {
-    grid-column: 2;
-  }
+  .topbar-inner, .main { width: min(100% - 22px, 1240px); }
+  .brand-copy, .profile-copy { display: none; }
+  .nav { overflow-x: auto; justify-content: flex-start; }
+  .nav button { white-space: nowrap; }
+  .hero-copy, .hero-status { padding: 25px 22px; }
+  .kpis { grid-template-columns: 1fr 1fr; }
+  .details-grid, .request-summary, .application-form { grid-template-columns: 1fr; }
+  .application-form .full, .conv-mini { grid-column: auto; }
+  .history-row { grid-template-columns: 1fr 1fr; }
+  .history-row .badge { grid-column: 1 / -1; }
+  .document-row { grid-template-columns: auto 1fr; }
+  .document-row .badge, .document-row .text-button { grid-column: 2; }
 }
 
 @media (max-width: 460px) {
-  .kpis {
-    grid-template-columns: 1fr;
-  }
-
-  .profile .logout {
-    padding: 7px 8px;
-  }
-
-  .hero-actions,
-  .action-strip {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .history-row {
-    grid-template-columns: 1fr;
-  }
-
-  .history-row .badge {
-    grid-column: auto;
-  }
+  .kpis { grid-template-columns: 1fr; }
+  .profile .logout { padding: 7px 8px; }
+  .hero-actions, .action-strip { align-items: stretch; flex-direction: column; }
+  .history-row { grid-template-columns: 1fr; }
+  .history-row .badge { grid-column: auto; }
 }
 </style>

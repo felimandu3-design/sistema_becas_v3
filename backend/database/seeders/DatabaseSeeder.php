@@ -39,6 +39,30 @@ class DatabaseSeeder extends Seeder
                 ->value('id');
 
 
+                /*
+            |--------------------------------------------------------------------------
+            | 1.5. CARRERAS (Requisito para los grupos)
+            |--------------------------------------------------------------------------
+            */
+            $carreras = [
+                ['id' => 1, 'nombre' => 'Ingeniería en Robótica'],
+                ['id' => 2, 'nombre' => 'Ingeniería en Sistemas Computacionales'],
+                ['id' => 3, 'nombre' => 'Ingeniería en Electrónica y Telecomunicaciones'],
+                ['id' => 4, 'nombre' => 'Ingeniería en Logística y Transporte'],
+                ['id' => 5, 'nombre' => 'Licenciatura en Administración y Gestión Empresarial'],
+                ['id' => 6, 'nombre' => 'Licenciatura en Comercio Internacional y Aduanas'],
+            ];
+
+            foreach ($carreras as $carrera) {
+                DB::table('carreras')->updateOrInsert(
+                    ['id' => $carrera['id']],
+                    [
+                        'nombre' => $carrera['nombre'],
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]
+                );
+            }
             /*
             |--------------------------------------------------------------------------
             | 2. GRUPOS
