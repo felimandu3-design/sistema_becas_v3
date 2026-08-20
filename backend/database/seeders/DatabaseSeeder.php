@@ -39,18 +39,18 @@ class DatabaseSeeder extends Seeder
                 ->value('id');
 
 
-                /*
+            /*
             |--------------------------------------------------------------------------
             | 1.5. CARRERAS (Requisito para los grupos)
             |--------------------------------------------------------------------------
             */
             $carreras = [
-                ['id' => 1, 'nombre' => 'Ingeniería en Robótica'],
-                ['id' => 2, 'nombre' => 'Ingeniería en Sistemas Computacionales'],
-                ['id' => 3, 'nombre' => 'Ingeniería en Electrónica y Telecomunicaciones'],
-                ['id' => 4, 'nombre' => 'Ingeniería en Logística y Transporte'],
-                ['id' => 5, 'nombre' => 'Licenciatura en Administración y Gestión Empresarial'],
-                ['id' => 6, 'nombre' => 'Licenciatura en Comercio Internacional y Aduanas'],
+                ['id' => 1, 'nombre' => 'Ingeniería en Robótica', 'clave' => 'IROB'],
+                ['id' => 2, 'nombre' => 'Ingeniería en Sistemas Computacionales', 'clave' => 'ISC'],
+                ['id' => 3, 'nombre' => 'Ingeniería en Electrónica y Telecomunicaciones', 'clave' => 'IET'],
+                ['id' => 4, 'nombre' => 'Ingeniería en Logística y Transporte', 'clave' => 'ILT'],
+                ['id' => 5, 'nombre' => 'Licenciatura en Administración y Gestión Empresarial', 'clave' => 'LAGE'],
+                ['id' => 6, 'nombre' => 'Licenciatura en Comercio Internacional y Aduanas', 'clave' => 'LCIA'],
             ];
 
             foreach ($carreras as $carrera) {
@@ -58,11 +58,13 @@ class DatabaseSeeder extends Seeder
                     ['id' => $carrera['id']],
                     [
                         'nombre' => $carrera['nombre'],
+                        'clave' => $carrera['clave'], 
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]
                 );
             }
+
             /*
             |--------------------------------------------------------------------------
             | 2. GRUPOS
@@ -353,9 +355,6 @@ class DatabaseSeeder extends Seeder
                             /*
                             |--------------------------------------------------------------------------
                             | Los demo NO quedan verificados.
-                            |
-                            | Así podemos distinguir claramente
-                            | las cuentas ficticias.
                             |--------------------------------------------------------------------------
                             */
 
@@ -379,10 +378,6 @@ class DatabaseSeeder extends Seeder
             |--------------------------------------------------------------------------
             | 8. CONVOCATORIA PUBLICADA
             |--------------------------------------------------------------------------
-            |
-            | Cierra dentro de dos días para poder probar
-            | convocatorias:recordar-cierre.
-            |
             */
 
             DB::table('convocatorias')->updateOrInsert(
@@ -413,12 +408,6 @@ class DatabaseSeeder extends Seeder
 
                     'estado' =>
                         'PUBLICADA',
-
-                    'notificacion_publicada_en' =>
-                        null,
-
-                    'recordatorio_2_dias_en' =>
-                        null,
 
                     'updated_at' =>
                         now(),
@@ -466,12 +455,6 @@ class DatabaseSeeder extends Seeder
                     'estado' =>
                         'BORRADOR',
 
-                    'notificacion_publicada_en' =>
-                        null,
-
-                    'recordatorio_2_dias_en' =>
-                        null,
-
                     'updated_at' =>
                         now(),
 
@@ -513,14 +496,6 @@ class DatabaseSeeder extends Seeder
 
                     'estado' =>
                         'CERRADA',
-
-                    'notificacion_publicada_en' =>
-                        now()
-                            ->subMonths(3),
-
-                    'recordatorio_2_dias_en' =>
-                        now()
-                            ->subMonths(2),
 
                     'updated_at' =>
                         now(),

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue'
+import axios from 'axios'
 
 const props = defineProps({
   usuario: Object,
@@ -16,7 +17,7 @@ const emit = defineEmits(['cambiar-seccion', 'submit-solicitud'])
 const formSolicitud = ref({
   modalidad: '',
   carrera_id: '',
-  grupo: ''
+  grupo_id: '' 
 })
 
 const modalidades = [
@@ -25,11 +26,62 @@ const modalidades = [
   { value: 'SITUACION_SOCIOECONOMICA', label: 'Situación socioeconómica' },
 ]
 
+// Nuevas variables para el select dinámico
+const gruposFiltrados = ref([])
+const cargandoGrupos = ref(false)
+
+// Función mejorada para ir por los grupos al servidor
+const cargarGrupos = async (carreraId) => {
+  if (!carreraId) {
+    gruposFiltrados.value = []
+    return
+  }
+  cargandoGrupos.value = true
+  try {
+    // Le decimos a Axios que lleve sus credenciales (cookies de sesión) al puerto 8000
+    const respuesta = await axios.get(`http://127.0.0.1:8000/api/carreras/${carreraId}/grupos`, {
+        withCredentials: true
+    })
+    
+    // Imprimimos en consola para ver qué está llegando realmente
+    console.log("¡Lo que mandó Laravel! ->", respuesta.data)
+
+    // Filtro a prueba de errores: revisamos que sí sea un arreglo válido
+    if (respuesta.data && Array.isArray(respuesta.data.data)) {
+        gruposFiltrados.value = respuesta.data.data
+    } else if (Array.isArray(respuesta.data)) {
+        gruposFiltrados.value = respuesta.data
+    } else {
+        gruposFiltrados.value = [] 
+        console.error("Laravel no devolvió un arreglo válido. Devolvió:", respuesta.data)
+    }
+
+  } catch (error) {
+    console.error("Error al obtener los grupos:", error)
+    gruposFiltrados.value = []
+  } finally {
+    cargandoGrupos.value = false
+  }
+}
+
+// Vigilar si el alumno cambia de carrera en el select para cargar sus grupos
+watch(() => formSolicitud.value.carrera_id, (nuevoId, viejoId) => {
+  if (nuevoId !== viejoId && viejoId !== undefined) {
+    formSolicitud.value.grupo_id = '' // Limpiamos el grupo si cambia de carrera
+  }
+  cargarGrupos(nuevoId)
+})
+
 // Pre-llenar datos si el usuario ya los tiene en su perfil
-watch(() => props.usuario, (u) => {
+watch(() => props.usuario, async (u) => {
   if (u && !props.solicitudActiva) {
     formSolicitud.value.carrera_id = u.carrera_id || ''
-    formSolicitud.value.grupo = u.grupo?.nombre || u.grupo || ''
+    
+    // Si ya trae carrera, cargamos sus grupos primero, y luego seleccionamos su grupo
+    if (u.carrera_id) {
+      await cargarGrupos(u.carrera_id)
+      formSolicitud.value.grupo_id = u.grupo_id || ''
+    }
   }
 }, { immediate: true })
 
@@ -151,21 +203,29 @@ function modalidadLabel(valor) {
 
         <label class="field">
           <span>Carrera</span>
-          <select v-model="formSolicitud.carrera_id">
-            <option value="">Usar carrera de mi perfil</option>
+          <select v-model="formSolicitud.carrera_id" required>
+            <option value="">Selecciona una carrera</option>
             <option v-for="c in carreras" :key="c.id" :value="c.id">{{ c.nombre }}</option>
           </select>
         </label>
 
+        <!-- SELECT DEPENDIENTE DE GRUPOS -->
         <label class="field">
-          <span>Grupo</span>
-          <input v-model="formSolicitud.grupo" type="text" placeholder="Ej. 8A" />
+          <span>Grupo *</span>
+          <select v-model="formSolicitud.grupo_id" :disabled="!formSolicitud.carrera_id || cargandoGrupos" required>
+            <option value="">
+              {{ cargandoGrupos ? 'Cargando grupos...' : (formSolicitud.carrera_id ? 'Selecciona tu grupo' : 'Primero elige carrera') }}
+            </option>
+            <option v-for="g in gruposFiltrados" :key="g.id" :value="g.id">
+              {{ g.nombre }} ({{ g.turno }})
+            </option>
+          </select>
         </label>
 
         <div class="form-note full">Al enviar la solicitud confirmas que la información registrada es correcta.</div>
 
         <div class="form-actions full">
-          <button type="submit" class="primary-button" :disabled="guardando">
+          <button type="submit" class="primary-button" :disabled="guardando || !formSolicitud.grupo_id">
             {{ guardando ? 'Registrando...' : 'Registrar solicitud' }}
           </button>
         </div>

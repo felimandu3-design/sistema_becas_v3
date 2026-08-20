@@ -79,12 +79,20 @@ const documentos = computed(() => {
 const progresoDocumentos = computed(() => {
   if (!solicitudActiva.value) return 0
   const total = documentos.value.length
-  if (!total) return 15
+  
+  if (!total) return 15 // Solo tiene la solicitud creada, sin archivos
+
+  // Verificamos si el documento que subió no está rechazado
   const validos = documentos.value.filter(d => {
     const e = String(d.estado || d.estatus || '').toUpperCase()
     return !['RECHAZADO', 'OBSERVADO', 'CORRECCION'].includes(e)
   }).length
-  return Math.min(100, 35 + validos * 15)
+
+  // Como ahora solo es 1 documento obligatorio, si es válido, tiene el 100%
+  if (validos >= 1) return 100 
+  
+  // Si subió algo pero se lo rechazaron, lo bajamos a 50% para que corrija
+  return 50 
 })
 
 const estadoActual = computed(() =>
@@ -157,7 +165,7 @@ async function crearSolicitud(datosFormulario) {
       convocatoria_id: convocatoria.value.id,
       modalidad: datosFormulario.modalidad,
       carrera_id: datosFormulario.carrera_id || props.usuario?.carrera_id || null,
-      grupo: datosFormulario.grupo || props.usuario?.grupo || null,
+      grupo_id: datosFormulario.grupo_id || props.usuario?.grupo_id || null,
     }
 
     Object.keys(payload).forEach(k => {

@@ -13,22 +13,28 @@ const modal = ref(null)
 const convocatoriaForm = ref({})
 
 // Helpers locales
-function estado(valor) { return String(valor || '').trim().toUpperCase() }
+function estado(valor) { 
+  return String(valor || '').trim().toUpperCase() 
+}
+
 function nombreEstado(valor) {
   const mapa = { BORRADOR: 'Borrador', PUBLICADA: 'Publicada', CERRADA: 'Cerrada' }
   return mapa[estado(valor)] || valor || 'Sin estado'
 }
+
 function claseEstado(valor) {
   const v = estado(valor)
   if (v === 'PUBLICADA') return 'success'
   if (v === 'CERRADA') return 'danger'
   return 'warning'
 }
+
 function fecha(valor) {
   if (!valor) return '—'
   const d = new Date(valor)
   return Number.isNaN(d.getTime()) ? valor : d.toLocaleDateString('es-MX')
 }
+
 function urlArchivo(c) {
   const ruta = c?.archivo_url || c?.pdf_url || c?.archivo
   if (!ruta) return null
@@ -38,15 +44,33 @@ function urlArchivo(c) {
 
 // Lógica de Convocatorias
 function nuevaConvocatoria() {
-  convocatoriaForm.value = { id: null, periodo_id: '', nombre: '', descripcion: '', requisitos: '', promedio_minimo: 8, fecha_inicio: '', fecha_cierre: '', estado: 'BORRADOR', archivo: null }
+  convocatoriaForm.value = { 
+    id: null, 
+    periodo_id: '', 
+    nombre: '', 
+    descripcion: '', 
+    requisitos: '', 
+    promedio_minimo: 8, 
+    fecha_inicio: '', 
+    fecha_cierre: '', 
+    estado: 'BORRADOR', 
+    archivo: null 
+  }
   modal.value = 'convocatoria'
 }
 
 function editarConvocatoria(c) {
   convocatoriaForm.value = {
-    id: c.id, periodo_id: c.periodo_id || c.periodo?.id || '', nombre: c.nombre || c.titulo || '', descripcion: c.descripcion || '',
-    requisitos: c.requisitos || '', promedio_minimo: c.promedio_minimo ?? 8, fecha_inicio: String(c.fecha_inicio || '').slice(0, 10),
-    fecha_cierre: String(c.fecha_cierre || '').slice(0, 10), estado: c.estado || 'BORRADOR', archivo: null
+    id: c.id, 
+    periodo_id: c.periodo_id || c.periodo?.id || '', 
+    nombre: c.nombre || c.titulo || '', 
+    descripcion: c.descripcion || '',
+    requisitos: c.requisitos || '', 
+    promedio_minimo: c.promedio_minimo ?? 8, 
+    fecha_inicio: String(c.fecha_inicio || '').slice(0, 10),
+    fecha_cierre: String(c.fecha_cierre || '').slice(0, 10), 
+    estado: c.estado || 'BORRADOR', 
+    archivo: null
   }
   modal.value = 'convocatoria'
 }
@@ -57,7 +81,17 @@ function seleccionarPdf(evento) {
 
 async function guardarConvocatoria() {
   const f = convocatoriaForm.value
-  const payload = { periodo_id: f.periodo_id, nombre: f.nombre, descripcion: f.descripcion, requisitos: f.requisitos, promedio_minimo: Number(f.promedio_minimo), fecha_inicio: f.fecha_inicio, fecha_cierre: f.fecha_cierre, estado: f.estado }
+  const payload = { 
+    periodo_id: f.periodo_id, 
+    nombre: f.nombre, 
+    descripcion: f.descripcion, 
+    requisitos: f.requisitos, 
+    promedio_minimo: Number(f.promedio_minimo), 
+    fecha_inicio: f.fecha_inicio, 
+    fecha_cierre: f.fecha_cierre, 
+    estado: f.estado 
+  }
+
   try {
     let id = f.id
     if (id) {
@@ -66,11 +100,18 @@ async function guardarConvocatoria() {
       const { data } = await api.post('/master/convocatorias', payload)
       id = data?.data?.id || data?.convocatoria?.id
     }
+
     if (f.archivo && id) {
       const form = new FormData()
       form.append('archivo', f.archivo)
-      await api.post(`/master/convocatorias/${id}/archivo`, form)
+      
+      await api.post(`/master/convocatorias/${id}/archivo`, form, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
     }
+
     modal.value = null
     emit('actualizar')
     emit('toast', 'Convocatoria guardada correctamente.', 'ok')
