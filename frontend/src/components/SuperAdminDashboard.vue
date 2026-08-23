@@ -212,6 +212,10 @@ onMounted(cargarTodo)
 
     <template v-else>
 
+  <!-- =====================================================
+       Menu Horizontal (Parte Superior)
+  ====================================================== -->
+
       <!-- RESUMEN -->
       <TabResumen 
         v-if="seccion === 'resumen'"
@@ -267,9 +271,9 @@ onMounted(cargarTodo)
       />
 
       <!-- PERSONAL -->
-      <TabPersonal 
+      <TabPersonal
         v-if="seccion === 'personal'"
-        :staff="staff" :carreras="carreras"
+        :staff="staff" :carreras="carreras" :grupos="grupos"
         @actualizar="cargarTodo" @toast="mostrarToast" @abrir-reset="abrirReset"
       />
 

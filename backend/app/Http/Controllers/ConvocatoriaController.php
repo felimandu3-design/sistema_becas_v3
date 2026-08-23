@@ -259,9 +259,30 @@ class ConvocatoriaController extends Controller
         return response()->json(['status' => 'success', 'message' => 'Convocatoria eliminada.'], 200);
     }
 
+
+        /*
+    |--------------------------------------------------------------------------
+    | Ver PDF de la Convocatoria
+    |--------------------------------------------------------------------------
+    */
+
+    public function verPdf(Convocatoria $convocatoria)
+    {
+        if (!$convocatoria->archivo || !Storage::disk('public')->exists($convocatoria->archivo)) {
+            return response()->json(['status' => 'error', 'message' => 'El archivo no existe.'], 404);
+        }
+
+        $path = Storage::disk('public')->path($convocatoria->archivo);
+
+        return response()->file($path, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . basename($path) . '"'
+        ]);
+    }
+
     /*
     |--------------------------------------------------------------------------
-    | BUSCAR CONVOCATORIA VIGENTE (CORREGIDO)
+    | BUSCAR CONVOCATORIA VIGENTE
     |--------------------------------------------------------------------------
     | Devolvemos la más reciente que esté PUBLICADA o CERRADA.
     | El frontend se encarga de mostrar si las fechas siguen abiertas.

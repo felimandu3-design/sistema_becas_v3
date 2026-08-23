@@ -38,263 +38,108 @@ class RolAsignacionController extends Controller
         ]);
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | CREAR PERSONAL
-    |--------------------------------------------------------------------------
-    */
+/*
+|--------------------------------------------------------------------------
+| CREAR PERSONAL
+|--------------------------------------------------------------------------
+*/
+/*
+|--------------------------------------------------------------------------
+| CREAR PERSONAL
+|--------------------------------------------------------------------------
+*/
+public function crearStaff(Request $request) {
+    $data = $request->validate([
+        'name' => ['required', 'string', 'max:255'],
+        'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+        'password' => ['required', 'string', 'min:8'],
+        'role' => ['required', 'in:admin,profesor'],
 
-    public function crearStaff(
-        Request $request
-    ) {
-        $data = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-            ],
+        // Validaciones para Admin y Profesor
+        'carrera_id' => ['nullable', 'integer', 'exists:carreras,id'],
+        'grupo_id' => ['nullable', 'integer', 'exists:grupos,id'],
+    ]);
 
-            'email' => [
-                'required',
-                'email',
-                'max:255',
-                'unique:users,email',
-            ],
-
-            'password' => [
-                'required',
-                'string',
-                'min:8',
-            ],
-
-            'role' => [
-                'required',
-                'in:admin,profesor',
-            ],
-
-            'carrera_id' => [
-                'nullable',
-                'integer',
-                'exists:carreras,id',
-            ],
-
-            'carreras' => [
-                'nullable',
-                'array',
-            ],
-
-            'carreras.*' => [
-                'integer',
-                'exists:carreras,id',
-            ],
+    return DB::transaction(function () use ($data) {
+        $usuario = User::create([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'password' => Hash::make($data['password']),
+            'role' => $data['role'],
+            'carrera_id' => $data['role'] === 'admin' ? ($data['carrera_id'] ?? null) : null,
+            'grupo_id' => $data['role'] === 'profesor' ? ($data['grupo_id'] ?? null) : null,
+            'must_change_password' => true,
+            'email_verified_at' => now(),
         ]);
-
-        return DB::transaction(
-            function () use ($data) {
-
-                $usuario = User::create([
-                    'name' =>
-                        $data['name'],
-
-                    'email' =>
-                        $data['email'],
-
-                    'password' =>
-                        Hash::make(
-                            $data['password']
-                        ),
-
-                    'role' =>
-                        $data['role'],
-
-                    'carrera_id' =>
-                        $data['carrera_id']
-                        ?? null,
-
-                    /*
-                    | La primera contraseña
-                    | también será temporal.
-                    */
-                    'must_change_password' =>
-                        true,
-
-                    'email_verified_at' =>
-                        now(),
-                ]);
-
-                $carreras =
-                    $data['carreras']
-                    ?? [];
-
-                if (
-                    empty($carreras) &&
-                    !empty(
-                        $data['carrera_id']
-                    )
-                ) {
-                    $carreras = [
-                        $data['carrera_id'],
-                    ];
-                }
-
-                if (
-                    in_array(
-                        $usuario->role,
-                        [
-                            'admin',
-                            'profesor',
-                        ],
-                        true
-                    )
-                ) {
-                    $usuario
-                        ->carrerasAsignadas()
-                        ->sync(
-                            $carreras
-                        );
-                }
-
-                return response()->json([
-                    'status' =>
-                        'success',
-
-                    'message' =>
-                        'Personal creado correctamente.',
-
-                    'data' =>
-                        $usuario->load([
-                            'carrera',
-                            'carrerasAsignadas',
-                        ]),
-                ], 201);
-            }
-        );
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | ACTUALIZAR PERSONAL
-    |--------------------------------------------------------------------------
-    */
-
-    public function actualizarStaff(
-        Request $request,
-        User $usuario
-    ) {
-        if (
-            !in_array(
-                $usuario->role,
-                [
-                    'admin',
-                    'profesor',
-                ],
-                true
-            )
-        ) {
-            return response()->json([
-                'status' =>
-                    'error',
-
-                'message' =>
-                    'El usuario seleccionado no pertenece al personal administrable.',
-            ], 422);
-        }
-
-        $data = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-            ],
-
-            'email' => [
-                'required',
-                'email',
-                'max:255',
-                'unique:users,email,' .
-                $usuario->id,
-            ],
-
-            'role' => [
-                'required',
-                'in:admin,profesor',
-            ],
-
-            'carrera_id' => [
-                'nullable',
-                'integer',
-                'exists:carreras,id',
-            ],
-
-            'carreras' => [
-                'nullable',
-                'array',
-            ],
-
-            'carreras.*' => [
-                'integer',
-                'exists:carreras,id',
-            ],
-        ]);
-
-        DB::transaction(
-            function () use (
-                $usuario,
-                $data
-            ) {
-                $usuario->update([
-                    'name' =>
-                        $data['name'],
-
-                    'email' =>
-                        $data['email'],
-
-                    'role' =>
-                        $data['role'],
-
-                    'carrera_id' =>
-                        $data['carrera_id']
-                        ?? null,
-                ]);
-
-                $carreras =
-                    $data['carreras']
-                    ?? [];
-
-                if (
-                    empty($carreras) &&
-                    !empty(
-                        $data['carrera_id']
-                    )
-                ) {
-                    $carreras = [
-                        $data['carrera_id'],
-                    ];
-                }
-
-                $usuario
-                    ->carrerasAsignadas()
-                    ->sync(
-                        $carreras
-                    );
-            }
-        );
 
         return response()->json([
             'status' => 'success',
-
-            'message' =>
-                'Personal actualizado correctamente.',
-
-            'data' =>
-                $usuario
-                    ->fresh()
-                    ->load([
-                        'carrera',
-                        'carrerasAsignadas',
-                    ]),
-        ]);
+            'message' => 'Personal creado correctamente.',
+            'data' => $usuario->load(['carrera', 'gruposAsignados']),
+        ], 201);
+    });
+}
+/*
+|--------------------------------------------------------------------------
+| ACTUALIZAR PERSONAL
+|--------------------------------------------------------------------------
+*/
+public function actualizarStaff(Request $request, User $usuario) {
+    if (!in_array($usuario->role, ['admin', 'profesor'], true)) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'El usuario seleccionado no pertenece al personal administrable.',
+        ], 422);
     }
+
+    $data = $request->validate([
+        'name' => ['required', 'string', 'max:255'],
+        'email' => ['required', 'email', 'max:255', 'unique:users,email,' . $usuario->id],
+        'role' => ['required', 'in:admin,profesor'],
+
+        'carrera_id' => ['nullable', 'integer', 'exists:carreras,id'],
+        'grupo_id' => ['nullable', 'integer', 'exists:grupos,id'],
+    ]);
+
+    DB::transaction(function () use ($usuario, $data) {
+        $usuario->update([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'role' => $data['role'],
+            'carrera_id' => $data['role'] === 'admin' ? ($data['carrera_id'] ?? null) : null,
+            'grupo_id' => $data['role'] === 'profesor' ? ($data['grupo_id'] ?? null) : null,
+        ]);
+    });
+
+    return response()->json([
+        'status' => 'success',
+        'message' => 'Personal actualizado correctamente.',
+        'data' => $usuario->fresh()->load(['carrera', 'gruposAsignados']),
+    ]);
+}
+
+    /*
+|--------------------------------------------------------------------------
+| RESTABLECER CONTRASEÑA
+|--------------------------------------------------------------------------
+*/
+public function resetPassword(Request $request) {
+    $data = $request->validate([
+        'user_id' => ['required', 'integer', 'exists:users,id'],
+        'password' => ['required', 'string', 'min:8'],
+    ]);
+
+    $usuario = User::findOrFail($data['user_id']);
+    $usuario->update([
+        'password' => Hash::make($data['password']),
+        'must_change_password' => true,
+    ]);
+
+    return response()->json([
+        'status' => 'success',
+        'message' => 'Contraseña actualizada correctamente.'
+    ]);
+}
 
     /*
     |--------------------------------------------------------------------------

@@ -60,7 +60,7 @@ const cambiarFondoAutomatico = () => {
 
 
 /* =========================================================
-   VISTA
+   VISTA / OJO 
 ========================================================= */
 
 const vistaActiva =
@@ -69,6 +69,11 @@ const vistaActiva =
 const usuarioActivo =
   ref(null);
 
+const mostrarPasswordLogin = ref(false);
+
+const mostrarPasswordRegistro = ref(false);
+
+const mostrarPasswordConfirmacion = ref(false);
 
 /* =========================================================
    2FA
@@ -1322,117 +1327,79 @@ onUnmounted(() => {
       ==================================================== -->
 
       <div
-        v-if="
-          vistaActiva ===
-          'convocatoria-publica'
-        "
+        v-if="vistaActiva === 'convocatoria-publica'"
         class="w-full max-w-lg relative z-20"
       >
 
-        <div
-          class="bg-white rounded-3xl p-8 shadow-2xl space-y-5"
-        >
+        <div class="bg-white rounded-3xl p-8 shadow-2xl space-y-5">
 
-          <div
-            class="flex justify-between"
-          >
-
-            <h2
-              class="font-black uppercase"
-            >
+          <div class="flex justify-between">
+            <h2 class="font-black uppercase">
               Convocatoria Vigente
             </h2>
 
-
             <button
-              @click="
-                cambiarAInicio
-              "
+              @click="cambiarAInicio"
               class="text-xs text-[#00723F] font-bold"
             >
               Regresar
             </button>
-
           </div>
 
-
           <p
-            v-if="
-              cargandoConvocatoriasPublicas
-            "
+            v-if="cargandoConvocatoriasPublicas"
             class="text-center text-sm"
           >
             Cargando...
           </p>
 
-
           <p
-            v-else-if="
-              convocatoriasPublicas.length ===
-              0
-            "
+            v-else-if="convocatoriasPublicas.length === 0"
             class="text-center text-sm"
           >
             No hay convocatoria activa.
           </p>
 
-
           <div
             v-else
             class="space-y-3"
           >
-
             <article
-              v-for="
-                convocatoria
-                in convocatoriasPublicas
-              "
-              :key="
-                convocatoria.id
-              "
-              class="border rounded-xl p-4"
+              v-for="convocatoria in convocatoriasPublicas"
+              :key="convocatoria.id"
+              class="border rounded-xl p-4 space-y-2"
             >
 
-              <h3
-                class="font-bold"
-              >
-                {{
-                  convocatoria.titulo
-                  ||
-                  convocatoria.nombre
-                }}
+              <h3 class="font-bold">
+                {{ convocatoria.titulo || convocatoria.nombre }}
               </h3>
 
-
-              <p
-                class="text-xs text-slate-500"
-              >
-                {{
-                  convocatoria.descripcion
-                }}
+              <p class="text-xs text-slate-500">
+                {{ convocatoria.descripcion }}
               </p>
 
-
-              <p
-                class="text-xs mt-2"
-              >
-                Cierre:
-                {{
-                  formatearFecha(
-                    convocatoria.fecha_cierre
-                  )
-                }}
+              <p class="text-xs mt-2 text-slate-700 font-medium">
+                Cierre: {{ formatearFecha(convocatoria.fecha_cierre) }}
               </p>
+
+              <!-- Botón/Enlace para abrir el PDF si existe el archivo -->
+              <div v-if="convocatoria.archivo" class="pt-2">
+                <!-- Opción recomendada usando URL completa al Backend -->
+<a 
+  :href="`http://localhost:8000/storage/${convocatoria.archivo}`" 
+  target="_blank" 
+  rel="noopener noreferrer"
+  class="inline-flex items-center gap-1.5 text-xs bg-[#00723F] hover:bg-[#005830] text-white font-semibold py-2 px-3 rounded-lg transition-colors"
+>
+  📄 Ver PDF
+</a>
+              </div>
 
             </article>
-
           </div>
 
-
           <button
-            @click="
-              cambiarALogin
-            "
+            @click="cambiarALogin"
             class="w-full bg-[#00723F] text-white py-3 rounded-xl font-bold text-xs uppercase"
           >
             Iniciar sesión
@@ -1441,269 +1408,503 @@ onUnmounted(() => {
         </div>
 
       </div>
-
+        
 
       <!-- ===================================================
-           LOGIN
+      LOGIN
       ==================================================== -->
 
+
       <div
-        v-if="
-          vistaActiva ===
-          'login'
-        "
-        class="w-full max-w-md relative z-20"
+
+      v-if="vistaActiva === 'login'"
+
+      class="w-full max-w-md relative z-20"
+
       >
 
-        <div
-          class="bg-white rounded-3xl p-8 shadow-2xl space-y-5"
-        >
+      <div class="bg-white rounded-3xl p-8 shadow-2xl space-y-5">
 
-          <img
-            :src="logoUptex"
-            alt="UPTex"
-            class="w-40 mx-auto"
-          />
+        <img
 
+        :src="logoUptex"
 
-          <div
-            class="flex justify-between"
-          >
+        alt="UPTex"
 
-            <div>
+        class="w-40 mx-auto"
 
-              <h2
-                class="font-black uppercase"
-              >
-                Iniciar Sesión
-              </h2>
-
-              <p
-                class="text-xs text-slate-500"
-              >
-                Credenciales institucionales
-              </p>
-
-            </div>
+        />
 
 
-            <button
-              @click="
-                cambiarAInicio
-              "
-              class="text-xs text-[#00723F]"
-            >
-              Regresar
-            </button>
+
+        <div class="flex justify-between">
+
+          <div>
+
+            <h2 class="font-black uppercase">
+
+              Iniciar Sesión
+
+            </h2>
+
+            <p class="text-xs text-slate-500">
+
+              Credenciales institucionales
+
+            </p>
 
           </div>
 
 
-          <form
-            @submit.prevent="
-              manejarLogin
-            "
-            class="space-y-4"
+          <button
+
+          @click="cambiarAInicio"
+
+          class="text-xs text-[#00723F]"
+
           >
 
-            <input
-              v-model="
-                correoUsuario
-              "
-              type="email"
-              required
-              placeholder="Correo institucional"
-              class="w-full border rounded-xl px-4 py-3 text-sm"
-            />
+          Regresar
 
-
-            <input
-              v-model="
-                passwordUsuario
-              "
-              type="password"
-              required
-              placeholder="Contraseña"
-              class="w-full border rounded-xl px-4 py-3 text-sm"
-            />
-
-
-            <button
-              type="button"
-              @click="
-                irARecuperar
-              "
-              class="text-xs text-slate-500 hover:underline"
-            >
-              ¿Olvidaste tu contraseña?
-            </button>
-
-
-            <p
-              v-if="
-                mensajeLogin
-              "
-              :class="
-                errorLogin
-                  ? 'text-red-700'
-                  : 'text-green-700'
-              "
-              class="text-xs text-center font-bold"
-            >
-              {{ mensajeLogin }}
-            </p>
-
-
-            <button
-              type="submit"
-              :disabled="
-                cargandoLogin
-              "
-              class="w-full bg-[#00723F] text-white py-3 rounded-xl font-bold text-xs uppercase disabled:opacity-50"
-            >
-
-              {{
-                cargandoLogin
-                  ? 'Validando...'
-                  : 'Validar Credenciales'
-              }}
-
-            </button>
-
-
-            <p
-              class="text-center text-xs"
-            >
-
-              ¿No tienes cuenta?
-
-              <button
-                type="button"
-                @click="
-                  cambiarARegistro
-                "
-                class="text-[#7A1C33] font-bold"
-              >
-                Regístrate
-              </button>
-
-            </p>
-
-          </form>
-
-        </div>
+        </button>
 
       </div>
 
 
-      <!-- ===================================================
-           REGISTRO
-      ==================================================== -->
+      <form
 
-      <div
-        v-if="
-          vistaActiva ===
-          'registro'
-        "
-        class="w-full max-w-md relative z-20"
+      @submit.prevent="manejarLogin"
+
+      class="space-y-4"
+
       >
 
-        <form
-          @submit.prevent="
-            manejarRegistro
-          "
-          class="bg-white rounded-3xl p-8 shadow-2xl space-y-4"
+      <input
+
+      v-model="correoUsuario"
+
+      type="email"
+
+      required
+
+      placeholder="Correo institucional"
+
+      class="w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00723F]"
+
+      />
+
+
+      <!-- Input Contraseña Login con Ojo -->
+
+      <div class="relative w-full">
+
+        <input
+
+        v-model="passwordUsuario"
+
+        :type="mostrarPasswordLogin ? 'text' : 'password'"
+
+        required
+
+        placeholder="Contraseña"
+
+        class="w-full border rounded-xl px-4 py-3 text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#00723F]"
+
+        />
+
+        <button
+
+        type="button"
+
+        @click="mostrarPasswordLogin = !mostrarPasswordLogin"
+
+        class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+
         >
 
-          <h2
-            class="font-black uppercase"
-          >
-            Crear Cuenta
-          </h2>
+        <!-- Ojo Abierto -->
+
+        <svg
+
+        v-if="!mostrarPasswordLogin"
+
+        xmlns="http://www.w3.org/2000/svg"
+
+        fill="none"
+
+        viewBox="0 0 24 24"
+
+        stroke-width="1.5"
+
+        stroke="currentColor"
+
+        class="w-5 h-5"
+
+        >
+
+        <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+
+      </svg>
 
 
-          <input
-            v-model="
-              nombreRegistro
-            "
-            required
-            placeholder="Nombre completo"
-            class="w-full border rounded-xl px-4 py-3"
-          />
+      <!-- Ojo Tachado -->
+
+      <svg
+
+      v-else
+
+      xmlns="http://www.w3.org/2000/svg"
+
+      fill="none"
+
+      viewBox="0 0 24 24"
+
+      stroke-width="1.5"
+
+      stroke="currentColor"
+
+      class="w-5 h-5"
+
+      >
+
+      <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+
+    </svg>
+
+  </button>
+
+</div>
 
 
-          <input
-            v-model="
-              correoRegistro
-            "
-            type="email"
-            required
-            placeholder="Correo institucional"
-            class="w-full border rounded-xl px-4 py-3"
-          />
+<button
+
+type="button"
+
+@click="irARecuperar"
+
+class="text-xs text-slate-500 hover:underline"
+
+>
+
+¿Olvidaste tu contraseña?
+
+</button>
 
 
-          <input
-            v-model="
-              passwordRegistro
-            "
-            type="password"
-            required
-            placeholder="Contraseña"
-            class="w-full border rounded-xl px-4 py-3"
-          />
+
+<p
+
+v-if="mensajeLogin"
+
+:class="errorLogin ? 'text-red-700' : 'text-green-700'"
+
+class="text-xs text-center font-bold"
+
+>
+
+{{ mensajeLogin }}
+
+</p>
 
 
-          <input
-            v-model="
-              passwordConfirmacion
-            "
-            type="password"
-            required
-            placeholder="Confirmar contraseña"
-            class="w-full border rounded-xl px-4 py-3"
-          />
+
+<button
+
+type="submit"
+
+:disabled="cargandoLogin"
+
+class="w-full bg-[#00723F] text-white py-3 rounded-xl font-bold text-xs uppercase disabled:opacity-50"
+
+>
+
+{{ cargandoLogin ? 'Validando...' : 'Validar Credenciales' }}
+
+</button>
 
 
-          <p
-            v-if="
-              mensajeRegistro
-            "
-            :class="
-              errorRegistro
-                ? 'text-red-700'
-                : 'text-green-700'
-            "
-            class="text-xs text-center"
-          >
-            {{ mensajeRegistro }}
-          </p>
+
+<p class="text-center text-xs">
+
+  ¿No tienes cuenta?
+
+  <button
+
+  type="button"
+
+  @click="cambiarARegistro"
+
+  class="text-[#7A1C33] font-bold"
+
+  >
+
+  Regístrate
+
+</button>
+
+</p>
+
+</form>
+
+</div>
+
+</div>
 
 
-          <button
-            class="w-full bg-[#00723F] text-white py-3 rounded-xl font-bold"
-          >
-            {{
-              cargandoRegistro
-                ? 'Registrando...'
-                : 'Crear Cuenta'
-            }}
-          </button>
+    <!-- ===================================================
+          REGISTRO
+      ==================================================== -->
 
 
-          <button
-            type="button"
-            @click="
-              cambiarALogin
-            "
-            class="w-full text-xs text-slate-500"
-          >
-            Regresar
-          </button>
+<div
 
-        </form>
+v-if="vistaActiva === 'registro'"
 
-      </div>
+class="w-full max-w-md relative z-20"
+
+>
+
+  <form
+  
+  @submit.prevent="manejarRegistro"
+  
+  class="bg-white rounded-3xl p-8 shadow-2xl space-y-4"
+  
+  >
+  
+  <h2 class="font-black uppercase">
+  
+    Crear Cuenta
+  
+  </h2>
+
+  
+  <input
+  
+  v-model="nombreRegistro"
+  
+  required
+  
+  placeholder="Nombre completo"
+  
+  class="w-full border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#00723F]"
+  
+  />
+
+      <input
+    
+      v-model="correoRegistro"
+    
+      type="email"
+    
+      required
+    
+      placeholder="Correo institucional"
+    
+      class="w-full border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#00723F]"
+    
+  />
+
+
+    <!-- Input Contraseña Registro con Ojo -->
+  
+    <div class="relative w-full">
+  
+      <input
+  
+      v-model="passwordRegistro"
+  
+      :type="mostrarPasswordRegistro ? 'text' : 'password'"
+  
+      required
+  
+      placeholder="Contraseña"
+  
+      class="w-full border rounded-xl px-4 py-3 pr-10 focus:outline-none focus:ring-2 focus:ring-[#00723F]"
+  
+    />
+
+    <button
+
+    type="button"
+
+    @click="mostrarPasswordRegistro = !mostrarPasswordRegistro"
+
+    class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+
+    >
+
+    <svg
+
+    v-if="!mostrarPasswordRegistro"
+
+    xmlns="http://www.w3.org/2000/svg"
+
+    fill="none"
+
+    viewBox="0 0 24 24"
+
+    stroke-width="1.5"
+
+    stroke="currentColor"
+
+    class="w-5 h-5"
+
+    >
+
+    <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+
+    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+
+  </svg>
+
+  <svg
+
+  v-else
+
+  xmlns="http://www.w3.org/2000/svg"
+
+  fill="none"
+
+  viewBox="0 0 24 24"
+
+  stroke-width="1.5"
+
+  stroke="currentColor"
+
+  class="w-5 h-5"
+
+  >
+
+  <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+
+</svg>
+
+</button>
+
+</div>
+
+
+<!-- Input Confirmar Contraseña Registro con Ojo -->
+
+<div class="relative w-full">
+
+  <input
+
+  v-model="passwordConfirmacion"
+
+  :type="mostrarPasswordConfirmacion ? 'text' : 'password'"
+
+  required
+
+  placeholder="Confirmar contraseña"
+
+  class="w-full border rounded-xl px-4 py-3 pr-10 focus:outline-none focus:ring-2 focus:ring-[#00723F]"
+
+  />
+
+      <button
+    
+      type="button"
+    
+      @click="mostrarPasswordConfirmacion = !mostrarPasswordConfirmacion"
+    
+      class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+    
+      >
+      
+      <svg
+      
+      v-if="!mostrarPasswordConfirmacion"
+      
+      xmlns="http://www.w3.org/2000/svg"
+      
+      fill="none"
+      
+      viewBox="0 0 24 24"
+      
+      stroke-width="1.5"
+      
+      stroke="currentColor"
+      
+      class="w-5 h-5"
+      
+      >
+      
+      <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+      
+      <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+      
+    </svg>
+    
+    <svg
+    
+    v-else
+    
+    xmlns="http://www.w3.org/2000/svg"
+    
+    fill="none"
+    
+    viewBox="0 0 24 24"
+    
+    stroke-width="1.5"
+    
+    stroke="currentColor"
+    
+    class="w-5 h-5"
+    
+    >
+    
+    <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+    
+  </svg>
+  
+</button>
+
+</div>
+
+
+<p
+
+v-if="mensajeRegistro"
+
+:class="errorRegistro ? 'text-red-700' : 'text-green-700'"
+
+class="text-xs text-center"
+
+>
+
+{{ mensajeRegistro }}
+
+</p>
+
+
+<button class="w-full bg-[#00723F] text-white py-3 rounded-xl font-bold">
+
+  {{ cargandoRegistro ? 'Registrando...' : 'Crear Cuenta' }}
+
+</button>
+
+
+<button
+
+type="button"
+
+@click="cambiarALogin"
+
+class="w-full text-xs text-slate-500"
+
+>
+
+Regresar
+
+</button>
+
+</form>
+
+</div>
 
 
       <!-- ===================================================

@@ -69,6 +69,13 @@ class User extends Authenticatable
         );
     }
 
+    public function gruposAsignados()
+    {
+        return $this->belongsTo(
+            Grupo::class, 
+            'grupo_id');
+    }
+
     public function gruposTutor()
     {
         return $this->hasMany(

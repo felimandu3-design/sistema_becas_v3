@@ -13,18 +13,18 @@ return Application::configure(
     commands: __DIR__.'/../routes/console.php',
     health: '/up',
 )
-->withMiddleware(
-    function (Middleware $middleware): void {
+->withMiddleware(function (Middleware $middleware): void {
+    $middleware->validateCsrfTokens(except: [
+        'api/*',
+        'login',
+    ]);
 
-        $middleware->alias([
-            'role' =>
-                \App\Http\Middleware\CheckRole::class,
-        ]);
-    }
-)
-->withExceptions(
-    function (Exceptions $exceptions): void {
-        //
-    }
-)
+    // Registro de aliases para Middlewares
+    $middleware->alias([
+        'role' => \App\Http\Middleware\CheckRole::class,
+    ]);
+})
+->withExceptions(function (Exceptions $exceptions): void {
+    //
+})
 ->create();

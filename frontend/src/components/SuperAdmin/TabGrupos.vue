@@ -66,7 +66,7 @@ async function eliminarGrupo(g) {
       <div>
         <span class="eyebrow">ORGANIZACIÓN ACADÉMICA</span>
         <h1>Grupos</h1>
-        <p>Organiza alumnos por carrera, periodo y tutor.</p>
+        <p>Organiza alumnos por carrera, periodo y profesor.</p>
       </div>
       <button class="primary" @click="nuevoGrupo">+ Nuevo grupo</button>
     </div>
@@ -93,7 +93,7 @@ async function eliminarGrupo(g) {
 
         <div class="group-info">
           <span>Cuatrimestre: <b>{{ g.cuatrimestre || '—' }}</b></span>
-          <span>Tutor: <b>{{ g.tutor?.name || 'Sin asignar' }}</b></span>
+          <span>Profesor: <b>{{ g.tutor?.name || 'Sin asignar' }}</b></span>
           <span>Alumnos: <b>{{ g.alumnos_count ?? props.alumnos.filter(a => String(a.grupo_id) === String(g.id)).length }}</b></span>
         </div>
 
@@ -124,9 +124,9 @@ async function eliminarGrupo(g) {
               <option v-for="p in props.periodos" :key="p.id" :value="p.id">{{ p.nombre }}</option>
             </select>
           </label>
-          <label>Tutor 
+          <label>Profesor 
             <select v-model="grupoForm.tutor_id">
-              <option value="">Sin tutor</option>
+              <option value="">Sin Profesor</option>
               <option v-for="u in props.staff.filter(u => u.role === 'profesor')" :key="u.id" :value="u.id">{{ u.name }}</option>
             </select>
           </label>

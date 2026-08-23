@@ -37,13 +37,15 @@ Route::post('/forgot-password', [PasswordResetController::class, 'enviarCodigo']
 Route::post('/reset-password', [PasswordResetController::class, 'restablecer']);
 Route::post('/two-factor/challenge', [TwoFactorController::class, 'challenge']);
 
+
 // Convocatorias y Carreras (Públicas)
 Route::get('/convocatorias-publicas', [ConvocatoriaController::class, 'publica']);
 Route::get('/convocatorias/vigente', [ConvocatoriaController::class, 'obtenerVigente']);
 Route::get('/convocatoria/activa', [ConvocatoriaController::class, 'getActiva']);
 Route::get('/carreras', [CarreraController::class, 'index']);
+Route::get('/convocatorias/{convocatoria}/pdf', [ConvocatoriaController::class, 'verPdf']);
 
-// ¡AQUÍ ESTÁ LA SOLUCIÓN! Ruta de grupos completamente pública:
+// Ruta de grupos completamente pública:
 Route::get('/carreras/{id}/grupos', function ($id) {
     return response()->json(\Illuminate\Support\Facades\DB::table('grupos')
         ->where('carrera_id', $id)
@@ -111,62 +113,63 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     /* --- SUPERADMIN --- */
-    Route::prefix('master')->middleware('role:superadmin')->group(function () {
-        Route::get('/stats', [SuperAdminController::class, 'getStats']);
-        Route::get('/usuarios', [SuperAdminController::class, 'listarUsuarios']);
-        Route::post('/reset-password', [SuperAdminController::class, 'resetPassword']);
-        Route::post('/usuarios/{usuario}/forzar-reset', [AlumnoGestionController::class, 'forzarResetPassword']);
-        
-        Route::get('/solicitudes', [SolicitudBecaController::class, 'todas']);
-        Route::patch('/solicitudes/{solicitud}/estatus', [SolicitudBecaController::class, 'actualizarEstatus']);
-        Route::patch('/solicitudes/{solicitud}/dictamen', [SolicitudBecaController::class, 'dictaminar']);
-        Route::patch('/solicitudes/{solicitud}/dictamen-final', [DictamenController::class, 'guardar']);
-        
-        Route::patch('/documentos/{documento}/observar', [DocumentoController::class, 'solicitarCorreccion']);
-        
-        Route::get('/alumnos', [AlumnoGestionController::class, 'index']);
-        Route::patch('/alumnos/{alumno}', [AlumnoGestionController::class, 'actualizar']);
-        
-        Route::get('/staff', [RolAsignacionController::class, 'listarStaff']);
-        Route::post('/staff', [RolAsignacionController::class, 'crearStaff']);
-        Route::patch('/staff/{usuario}', [RolAsignacionController::class, 'actualizarStaff']);
-        Route::put('/staff/{usuario}', [RolAsignacionController::class, 'actualizarStaff']);
-        Route::delete('/staff/{usuario}', [RolAsignacionController::class, 'eliminarStaff']);
-        
-        Route::get('/convocatorias', [ConvocatoriaController::class, 'index']);
-        Route::post('/convocatorias', [ConvocatoriaController::class, 'store']);
-        Route::get('/convocatorias/{convocatoria}', [ConvocatoriaController::class, 'show']);
-        Route::patch('/convocatorias/{convocatoria}', [ConvocatoriaController::class, 'update']);
-        Route::put('/convocatorias/{convocatoria}', [ConvocatoriaController::class, 'update']);
-        Route::delete('/convocatorias/{convocatoria}', [ConvocatoriaController::class, 'destroy']);
-        Route::post('/convocatorias/{convocatoria}/archivo', [ConvocatoriaController::class, 'reemplazarArchivo']);
-        Route::delete('/convocatorias/{convocatoria}/archivo', [ConvocatoriaController::class, 'eliminarArchivo']);
-        Route::patch('/convocatorias/{convocatoria}/publicar', [ConvocatoriaController::class, 'publicar']);
-        Route::patch('/convocatorias/{convocatoria}/cerrar', [ConvocatoriaController::class, 'cerrar']);
-        Route::post('/convocatorias/{convocatoria}/enviar-resultados', [ResultadosController::class, 'enviar']);
-        
-        Route::get('/periodos', [PeriodoController::class, 'index']);
-        Route::post('/periodos', [PeriodoController::class, 'store']);
-        Route::get('/periodos/{periodo}', [PeriodoController::class, 'show']);
-        Route::patch('/periodos/{periodo}', [PeriodoController::class, 'update']);
-        Route::put('/periodos/{periodo}', [PeriodoController::class, 'update']);
-        Route::patch('/periodos/{periodo}/cerrar', [PeriodoController::class, 'cerrar']);
-        Route::delete('/periodos/{periodo}', [PeriodoController::class, 'destroy']);
-        
-        Route::get('/carreras', [CarreraController::class, 'index']);
-        Route::post('/carreras', [CarreraController::class, 'store']);
-        Route::get('/carreras/{carrera}', [CarreraController::class, 'show']);
-        Route::patch('/carreras/{carrera}', [CarreraController::class, 'update']);
-        Route::put('/carreras/{carrera}', [CarreraController::class, 'update']);
-        Route::delete('/carreras/{carrera}', [CarreraController::class, 'destroy']);
-        
-        Route::get('/grupos', [GrupoController::class, 'index']);
-        Route::post('/grupos', [GrupoController::class, 'store']);
-        Route::get('/grupos/{grupo}', [GrupoController::class, 'show']);
-        Route::patch('/grupos/{grupo}', [GrupoController::class, 'update']);
-        Route::put('/grupos/{grupo}', [GrupoController::class, 'update']);
-        Route::delete('/grupos/{grupo}', [GrupoController::class, 'destroy']);
-        Route::post('/grupos/{grupo}/alumnos', [GrupoController::class, 'asignarAlumno']);
-        Route::delete('/grupos/{grupo}/alumnos/{alumno}', [GrupoController::class, 'quitarAlumno']);
-    });
+Route::prefix('master')->middleware(['auth:sanctum', 'role:superadmin'])->group(function () {
+    Route::get('/stats', [SuperAdminController::class, 'getStats']);
+    Route::get('/usuarios', [SuperAdminController::class, 'listarUsuarios']);
+    Route::post('/reset-password', [SuperAdminController::class, 'resetPassword']);
+    Route::post('/usuarios/{usuario}/forzar-reset', [AlumnoGestionController::class, 'forzarResetPassword']);
+    Route::post('/superadmin/reset-password', [StaffController::class, 'resetPassword']);
+
+    Route::get('/solicitudes', [SolicitudBecaController::class, 'todas']);
+    Route::patch('/solicitudes/{solicitud}/estatus', [SolicitudBecaController::class, 'actualizarEstatus']);
+    Route::patch('/solicitudes/{solicitud}/dictamen', [SolicitudBecaController::class, 'dictaminar']);
+    Route::patch('/solicitudes/{solicitud}/dictamen-final', [DictamenController::class, 'guardar']);
+    
+    Route::patch('/documentos/{documento}/observar', [DocumentoController::class, 'solicitarCorreccion']);
+    
+    Route::get('/alumnos', [AlumnoGestionController::class, 'index']);
+    Route::patch('/alumnos/{alumno}', [AlumnoGestionController::class, 'actualizar']);
+    
+    Route::get('/staff', [RolAsignacionController::class, 'listarStaff']);
+    Route::post('/staff', [RolAsignacionController::class, 'crearStaff']);
+    Route::patch('/staff/{usuario}', [RolAsignacionController::class, 'actualizarStaff']);
+    Route::put('/staff/{usuario}', [RolAsignacionController::class, 'actualizarStaff']);
+    Route::delete('/staff/{usuario}', [RolAsignacionController::class, 'eliminarStaff']);
+    
+    Route::get('/convocatorias', [ConvocatoriaController::class, 'index']);
+    Route::post('/convocatorias', [ConvocatoriaController::class, 'store']);
+    Route::get('/convocatorias/{convocatoria}', [ConvocatoriaController::class, 'show']);
+    Route::patch('/convocatorias/{convocatoria}', [ConvocatoriaController::class, 'update']);
+    Route::put('/convocatorias/{convocatoria}', [ConvocatoriaController::class, 'update']);
+    Route::delete('/convocatorias/{convocatoria}', [ConvocatoriaController::class, 'destroy']);
+    Route::post('/convocatorias/{convocatoria}/archivo', [ConvocatoriaController::class, 'reemplazarArchivo']);
+    Route::delete('/convocatorias/{convocatoria}/archivo', [ConvocatoriaController::class, 'eliminarArchivo']);
+    Route::patch('/convocatorias/{convocatoria}/publicar', [ConvocatoriaController::class, 'publicar']);
+    Route::patch('/convocatorias/{convocatoria}/cerrar', [ConvocatoriaController::class, 'cerrar']);
+    Route::post('/convocatorias/{convocatoria}/enviar-resultados', [ResultadosController::class, 'enviar']);
+    
+    Route::get('/periodos', [PeriodoController::class, 'index']);
+    Route::post('/periodos', [PeriodoController::class, 'store']);
+    Route::get('/periodos/{periodo}', [PeriodoController::class, 'show']);
+    Route::patch('/periodos/{periodo}', [PeriodoController::class, 'update']);
+    Route::put('/periodos/{periodo}', [PeriodoController::class, 'update']);
+    Route::patch('/periodos/{periodo}/cerrar', [PeriodoController::class, 'cerrar']);
+    Route::delete('/periodos/{periodo}', [PeriodoController::class, 'destroy']);
+    
+    Route::get('/carreras', [CarreraController::class, 'index']);
+    Route::post('/carreras', [CarreraController::class, 'store']);
+    Route::get('/carreras/{carrera}', [CarreraController::class, 'show']);
+    Route::patch('/carreras/{carrera}', [CarreraController::class, 'update']);
+    Route::put('/carreras/{carrera}', [CarreraController::class, 'update']);
+    Route::delete('/carreras/{carrera}', [CarreraController::class, 'destroy']);
+    
+    Route::get('/grupos', [GrupoController::class, 'index']);
+    Route::post('/grupos', [GrupoController::class, 'store']);
+    Route::get('/grupos/{grupo}', [GrupoController::class, 'show']);
+    Route::patch('/grupos/{grupo}', [GrupoController::class, 'update']);
+    Route::put('/grupos/{grupo}', [GrupoController::class, 'update']);
+    Route::delete('/grupos/{grupo}', [GrupoController::class, 'destroy']);
+    Route::post('/grupos/{grupo}/alumnos', [GrupoController::class, 'asignarAlumno']);
+    Route::delete('/grupos/{grupo}/alumnos/{alumno}', [GrupoController::class, 'quitarAlumno']);
+});
 });
