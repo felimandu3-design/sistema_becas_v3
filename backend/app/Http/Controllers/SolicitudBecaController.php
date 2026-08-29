@@ -17,19 +17,29 @@ class SolicitudBecaController extends Controller
         return response()->json(['data' => $solicitudes]);
     }
 
-    // SOLICITUDES POR CARRERA ASIGNADA (Admin / Profesor)
+    // SOLICITUDES POR CARRERA ASIGNADA (Admin / Profesor / Jefe)
     public function porCarreraAsignada(Request $request) {
         $usuario = $request->user();
 
         if (!$usuario) return response()->json(['message' => 'Usuario no autenticado.'], 401);
 
-        $carreras = DB::table('asignaciones_carrera')->where('user_id', $usuario->id)->pluck('carrera_id');
+        // 1. Buscamos en la tabla secundaria (asignaciones_carrera)
+        $carreras = DB::table('asignaciones_carrera')->where('user_id', $usuario->id)->pluck('carrera_id')->toArray();
+
+        // 2. Agregamos la carrera principal del perfil (si tiene una)
+        if ($usuario->carrera_id) {
+            $carreras[] = $usuario->carrera_id;
+        }
+
+        // 3. Limpiamos repetidos y vacíos
+        $carreras = collect($carreras)->filter()->unique()->values();
 
         if ($carreras->isEmpty()) {
             return response()->json(['data' => [], 'message' => 'No tienes carreras asignadas.']);
         }
 
-        $solicitudes = Solicitud::with(['usuario', 'convocatoria', 'carrera', 'grupoRelacion', 'documentos'])
+        // 4. Hacemos la consulta cruzando la información
+       $solicitudes = Solicitud::with(['usuario', 'convocatoria.periodo', 'carrera', 'grupoRelacion', 'documentos'])
             ->whereIn('carrera_id', $carreras)
             ->orderByDesc('id')->get();
 
@@ -104,13 +114,22 @@ class SolicitudBecaController extends Controller
         
         if (!$usuario) return false;
         if ($usuario->role === 'superadmin') return true;
-        if (!in_array($usuario->role, ['admin', 'profesor'], true)) return false;
+        
+        // Agregué 'jefe' y 'jefe_carrera' por si las dudas con los roles
+        if (!in_array($usuario->role, ['admin', 'profesor', 'jefe', 'jefe_carrera'], true)) return false; 
 
+        // 1. Buscamos en la tabla pivot
         $carreras = DB::table('asignaciones_carrera')
             ->where('user_id', $usuario->id)
             ->pluck('carrera_id')
             ->map(fn ($id) => (int) $id);
 
+        // 2. Agregamos su carrera principal
+        if ($usuario->carrera_id) {
+            $carreras->push((int) $usuario->carrera_id);
+        }
+
+        // 3. Verificamos si la carrera de la solicitud está en su lista
         return $carreras->contains((int) $solicitud->carrera_id);
     }
 
