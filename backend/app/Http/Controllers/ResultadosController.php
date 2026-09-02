@@ -10,22 +10,17 @@ use Illuminate\Support\Facades\DB;
 
 class ResultadosController extends Controller
 {
-    public function enviar(
-        Convocatoria $convocatoria
-    ): JsonResponse {
+    public function enviar(Convocatoria $convocatoria): JsonResponse
+    {
         /*
         |--------------------------------------------------------------------------
         | EVITAR DOBLE ENVÍO
         |--------------------------------------------------------------------------
         */
-
-        if (
-            $convocatoria->resultados_enviados_at
-        ) {
+        if ($convocatoria->resultados_enviados_at) {
             return response()->json([
-                'status' => 'error',
-                'message' =>
-                    'Los resultados de esta convocatoria ya fueron enviados.',
+                'status'  => 'error',
+                'message' => 'Los resultados de esta convocatoria ya fueron enviados.',
             ], 409);
         }
 
@@ -34,86 +29,49 @@ class ResultadosController extends Controller
         | OBTENER SOLAMENTE ACEPTADOS
         |--------------------------------------------------------------------------
         */
-
-        $solicitudes = Solicitud::with(
-            'user'
-        )
-            ->where(
-                'convocatoria_id',
-                $convocatoria->id
-            )
-            ->where(
-                'estado',
-                'ACEPTADA'
-            )
+        $solicitudes = Solicitud::with('user')
+            ->where('convocatoria_id', $convocatoria->id)
+            ->where('estado', 'ACEPTADA')
             ->get();
 
         if ($solicitudes->isEmpty()) {
             return response()->json([
-                'status' => 'error',
-                'message' =>
-                    'No existen alumnos aceptados en esta convocatoria.',
+                'status'  => 'error',
+                'message' => 'No existen alumnos aceptados en esta convocatoria.',
             ], 422);
         }
 
         /*
         |--------------------------------------------------------------------------
-        | ENVIAR
+        | ENVIAR NOTIFICACIONES Y REGISTRAR FECHA
         |--------------------------------------------------------------------------
         */
+        DB::transaction(function () use ($solicitudes, $convocatoria) {
+            foreach ($solicitudes as $solicitud) {
+                $usuario = $solicitud->user;
 
-        DB::transaction(
-            function () use (
-                $solicitudes,
-                $convocatoria
-            ) {
-                foreach (
-                    $solicitudes as $solicitud
-                ) {
-                    $usuario =
-                        $solicitud->user;
-
-                    if (
-                        !$usuario ||
-                        !$usuario->email
-                    ) {
-                        continue;
-                    }
-
-                    $usuario->notify(
-                        new ResultadoBecaNotification(
-                            $convocatoria,
-                            $solicitud
-                        )
-                    );
+                if (!$usuario || !$usuario->email) {
+                    continue;
                 }
 
-                /*
-                |--------------------------------------------------------------------------
-                | MARCAR ENVÍO
-                |--------------------------------------------------------------------------
-                */
-
-                $convocatoria
-                    ->forceFill([
-                        'resultados_enviados_at' =>
-                            now(),
-                    ])
-                    ->save();
+                $usuario->notify(new ResultadoBecaNotification($convocatoria, $solicitud));
             }
-        );
+
+            /*
+            |--------------------------------------------------------------------------
+            | MARCAR ENVÍO
+            |--------------------------------------------------------------------------
+            */
+            $convocatoria->forceFill([
+                'resultados_enviados_at' => now(),
+            ])->save();
+        });
 
         return response()->json([
-            'status' => 'success',
-
-            'message' =>
-                'Resultados enviados correctamente a los alumnos aceptados.',
-
-            'total_enviados' =>
-                $solicitudes->count(),
-
-            'data' =>
-                $convocatoria->fresh(),
-        ]);
+            'status'         => 'success',
+            'message'        => 'Resultados enviados correctamente a los alumnos aceptados.',
+            'total_enviados' => $solicitudes->count(),
+            'data'           => $convocatoria->fresh(),
+        ], 200);
     }
 }

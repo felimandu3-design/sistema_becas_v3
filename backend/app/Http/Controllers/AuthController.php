@@ -84,4 +84,12 @@ class AuthController extends Controller
             'message' => 'Sesión cerrada correctamente.'
         ]);
     }
+
+    public function user(Request $request)
+    {
+        return response()->json(
+        $request->user()->load(['grupo.carrera'])
+    );
+    }
+
 }

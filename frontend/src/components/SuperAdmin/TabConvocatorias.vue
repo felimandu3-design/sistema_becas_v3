@@ -4,10 +4,11 @@ import api from '../../api/axios'
 
 const props = defineProps({
   convocatorias: { type: Array, default: () => [] },
-  periodos: { type: Array, default: () => [] }
+  periodos: { type: Array, default: () => [] },
+  enviando: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['actualizar', 'toast'])
+const emit = defineEmits(['actualizar', 'toast', 'publicar-resultados'])
 
 const modal = ref(null)
 const convocatoriaForm = ref({})
@@ -142,26 +143,58 @@ async function accionConvocatoria(c, accion) {
       <div>
         <span class="eyebrow">PUBLICACIÓN</span>
         <h1>Convocatorias</h1>
-        <p>Crea, edita, publica y administra documentos.</p>
+        <p>Crea, edita, publica y administra las bases y resoluciones.</p>
       </div>
       <button class="primary" @click="nuevaConvocatoria">+ Nueva convocatoria</button>
     </div>
 
+    <!-- LISTADO DE CONVOCATORIAS -->
     <div class="records">
       <article v-for="c in props.convocatorias" :key="c.id" class="record">
         <div>
           <span class="badge" :class="claseEstado(c.estado)">{{ nombreEstado(c.estado) }}</span>
-          <h3>{{ c.nombre }}</h3>
+          <h3>{{ c.nombre || c.titulo }}</h3>
           <p>{{ c.periodo?.nombre || 'Sin periodo' }} · {{ fecha(c.fecha_inicio) }} — {{ fecha(c.fecha_cierre) }}</p>
         </div>
+
         <div class="actions">
+          <!-- BOTÓN DE PUBLICACIÓN MASIVA DE RESULTADOS -->
+          <button 
+            class="primary"
+            :class="{ 'secondary': c.resultados_enviados_at }"
+            :disabled="Boolean(c.resultados_enviados_at) || props.enviando"
+            @click="emit('publicar-resultados', c.id)"
+          >
+            <span v-if="props.enviando">Enviando...</span>
+            <span v-else-if="c.resultados_enviados_at">✅ Respuestas Enviadas</span>
+            <span v-else>📢 Publicar Resultados</span>
+          </button>
+
+          <!-- ACCIONES ESTÁNDAR -->
           <a v-if="urlArchivo(c)" :href="urlArchivo(c)" target="_blank" class="action-link">Ver PDF</a>
           <button @click="editarConvocatoria(c)">Editar</button>
-          <button v-if="estado(c.estado) !== 'PUBLICADA'" class="green-text" @click="accionConvocatoria(c, 'publicar')">Publicar</button>
-          <button v-else @click="accionConvocatoria(c, 'cerrar')">Cerrar</button>
+          
+          <button 
+            v-if="estado(c.estado) !== 'PUBLICADA'" 
+            class="green-text" 
+            @click="accionConvocatoria(c, 'publicar')"
+          >
+            Publicar
+          </button>
+          <button 
+            v-else 
+            @click="accionConvocatoria(c, 'cerrar')"
+          >
+            Cerrar
+          </button>
+
           <button class="danger-text" @click="accionConvocatoria(c, 'eliminar')">Eliminar</button>
         </div>
       </article>
+
+      <div v-if="!props.convocatorias.length" class="empty">
+        No hay convocatorias registradas.
+      </div>
     </div>
 
     <!-- MODAL CONVOCATORIA -->
@@ -169,6 +202,7 @@ async function accionConvocatoria(c, accion) {
       <form class="modal large" @submit.prevent="guardarConvocatoria">
         <button type="button" class="close" @click="modal = null">×</button>
         <h2>{{ convocatoriaForm.id ? 'Editar convocatoria' : 'Nueva convocatoria' }}</h2>
+        
         <div class="form-grid">
           <label>Nombre <input v-model="convocatoriaForm.nombre" required /></label>
           <label>Periodo 
@@ -191,6 +225,7 @@ async function accionConvocatoria(c, accion) {
           <label>Cierre <input v-model="convocatoriaForm.fecha_cierre" type="date" required /></label>
           <label class="full">PDF oficial <input type="file" accept="application/pdf" @change="seleccionarPdf" /></label>
         </div>
+
         <button class="primary submit">Guardar convocatoria</button>
       </form>
     </div>

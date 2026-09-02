@@ -284,8 +284,6 @@ class ConvocatoriaController extends Controller
     |--------------------------------------------------------------------------
     | BUSCAR CONVOCATORIA VIGENTE
     |--------------------------------------------------------------------------
-    | Devolvemos la más reciente que esté PUBLICADA o CERRADA.
-    | El frontend se encarga de mostrar si las fechas siguen abiertas.
     */
     private function buscarConvocatoriaVigente() {
         return Convocatoria::query()

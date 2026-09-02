@@ -63,15 +63,19 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Usuario Actual
     Route::get('/user', function (Request $request) {
-        $usuario = $request->user();
-        if (!$usuario) return response()->json(['status' => 'error', 'message' => 'Usuario no autenticado.'], 401);
-        try { $usuario->load(['carrera', 'grupoRelacion', 'carrerasAsignadas']); } catch (\Throwable $e) {}
-        return response()->json([
-            'status' => 'success',
-            'user' => $usuario,
-            'must_change_password' => (bool) ($usuario->must_change_password ?? false),
-        ]);
-    });
+    $usuario = $request->user();
+    if (!$usuario) return response()->json(['status' => 'error', 'message' => 'Usuario no autenticado.'], 401);
+    
+    try { 
+        $usuario->load(['grupo.carrera', 'carrera', 'grupoRelacion.carrera', 'carrerasAsignadas']); 
+    } catch (\Throwable $e) {}
+
+    return response()->json([
+        'status' => 'success',
+        'user' => $usuario,
+        'must_change_password' => (bool) ($usuario->must_change_password ?? false),
+    ]);
+});
 
     Route::post('/logout', [LoginController::class, 'logout']);
 
@@ -94,7 +98,7 @@ Route::middleware('auth:sanctum')->group(function () {
     /* --- PROFESOR --- */
     Route::prefix('profesor')->middleware('role:profesor')->group(function () {
         Route::get('/solicitudes', [SolicitudBecaController::class, 'porCarreraAsignada']);
-        Route::patch('/solicitudes/{solicitud}/estatus', [SolicitudBecaController::class, 'actualizarEstatus']);
+        Route::patch('/solicitudes/{solicitud}/estatus', [SolicitudBecaController::class, 'actualizarEstado']);
         Route::patch('/solicitudes/{solicitud}/dictamen', [SolicitudBecaController::class, 'dictaminar']);
         Route::patch('/documentos/{documento}/observar', [DocumentoController::class, 'solicitarCorreccion']);
     });

@@ -109,4 +109,12 @@ class User extends Authenticatable
             'user_id'
         );
     }
+
+    public function grupo()
+    {
+        return $this->hasOne(
+            Grupo::class, 
+            'profesor_id');
+    }
+
 }

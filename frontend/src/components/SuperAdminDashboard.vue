@@ -180,8 +180,34 @@ async function restablecerPassword() {
 function cerrarSesion() { emit('cerrar-sesion') }
 
 onMounted(cargarTodo)
-</script>
 
+/* =========================================================
+   PUBLICACIÓN MASIVA DE RESULTADOS
+========================================================= */
+const enviandoResultados = ref(false)
+
+async function publicarResultados(convocatoriaId) {
+  if (!convocatoriaId) return
+  
+  if (!confirm('¿Estás seguro de enviar y publicar todas las resoluciones a los alumnos aceptados? Esta acción enviará correos masivos.')) {
+    return
+  }
+
+  enviandoResultados.value = true
+  try {
+    const { data } = await api.post(`/api/convocatorias/${convocatoriaId}/enviar-resultados`)
+    
+    mostrarToast(data.message || 'Resultados enviados correctamente.')
+    await cargarTodo()
+  } catch (e) {
+    const msg = e.response?.data?.message || 'Ocurrió un error al enviar las resoluciones.'
+    mostrarToast(msg, 'error')
+  } finally {
+    enviandoResultados.value = false
+  }
+}
+
+</script>
 
 <template>
 <div class="dashboard">
@@ -212,83 +238,143 @@ onMounted(cargarTodo)
 
     <template v-else>
 
-  <!-- =====================================================
-       Menu Horizontal (Parte Superior)
-  ====================================================== -->
+      <!-- CABECERA PRINCIPAL CON ACCIÓN GLOBAL DE PUBLICACIÓN -->
+      <div class="heading">
+        <div>
+          <span class="eyebrow">PANEL GENERAL</span>
+          <h1>Administración General</h1>
+          <p>Gestión del sistema, convocatorias, periodos y expedientes.</p>
+        </div>
+
+        <!-- ACCIÓN DE ENVÍO MASIVO DE RESULTADOS -->
+        <div v-if="convocatoriaVigente" class="context">
+          <div>
+            <span>Convocatoria Vigente</span>
+            <strong>{{ convocatoriaVigente.titulo || 'Convocatoria Activa' }}</strong>
+            <button 
+              class="primary"
+              style="margin-top: 8px; width: 100%;"
+              :class="{ 'secondary': convocatoriaVigente.resultados_enviados_at }"
+              :disabled="Boolean(convocatoriaVigente.resultados_enviados_at) || enviandoResultados"
+              @click="publicarResultados(convocatoriaVigente.id)"
+            >
+              <span v-if="enviandoResultados">Enviando correos...</span>
+              <span v-else-if="convocatoriaVigente.resultados_enviados_at">
+                ✅ Resultados Publicados
+              </span>
+              <span v-else>📢 Publicar / Enviar Respuestas Definitivas</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- =====================================================
+           Menu Horizontal (Pestañas Dinámicas)
+      ====================================================== -->
 
       <!-- RESUMEN -->
       <TabResumen 
         v-if="seccion === 'resumen'"
-        :solicitudes="solicitudes" :alumnos="alumnos" :staff="staff" 
-        :carreras="carreras" :grupos="grupos" :convocatorias="convocatorias" 
-        :periodos="periodos" :statsApi="statsApi" :alertas="alertas"
+        :solicitudes="solicitudes" 
+        :alumnos="alumnos" 
+        :staff="staff" 
+        :carreras="carreras" 
+        :grupos="grupos" 
+        :convocatorias="convocatorias" 
+        :periodos="periodos" 
+        :statsApi="statsApi" 
+        :alertas="alertas"
         @actualizar="cargarTodo"
       />
 
       <!-- SOLICITUDES -->
       <TabSolicitudes 
         v-if="seccion === 'solicitudes'"
-        :solicitudes="solicitudes" :periodos="periodos" :carreras="carreras"
+        :solicitudes="solicitudes" 
+        :periodos="periodos" 
+        :carreras="carreras"
         @abrir-solicitud="abrirSolicitud"
       />
 
-      <!-- CONVOCATORIAS -->
+      <!-- CONVOCATORIAS (Actualizado con prop y event emit para publicación) -->
       <TabConvocatorias 
         v-if="seccion === 'convocatorias'"
-        :convocatorias="convocatorias" :periodos="periodos"
-        @actualizar="cargarTodo" @toast="mostrarToast"
+        :convocatorias="convocatorias" 
+        :periodos="periodos"
+        :enviando="enviandoResultados"
+        @actualizar="cargarTodo" 
+        @toast="mostrarToast"
+        @publicar-resultados="publicarResultados"
       />
 
       <!-- PERIODOS -->
       <TabPeriodos 
         v-if="seccion === 'periodos'"
         :periodos="periodos"
-        @actualizar="cargarTodo" @toast="mostrarToast"
+        @actualizar="cargarTodo" 
+        @toast="mostrarToast"
       />
 
       <!-- CARRERAS -->
       <TabCarreras 
         v-if="seccion === 'carreras'"
-        :carreras="carreras" :alumnos="alumnos" :grupos="grupos"
-        @actualizar="cargarTodo" @toast="mostrarToast"
+        :carreras="carreras" 
+        :alumnos="alumnos" 
+        :grupos="grupos"
+        @actualizar="cargarTodo" 
+        @toast="mostrarToast"
         @ver-grupos="id => { seccion = 'grupos' }"
       />
 
       <!-- GRUPOS -->
       <TabGrupos 
         v-if="seccion === 'grupos'"
-        :grupos="grupos" :carreras="carreras" :periodos="periodos" 
-        :staff="staff" :alumnos="alumnos" :periodoActivoId="periodoActivo?.id"
-        @actualizar="cargarTodo" @toast="mostrarToast"
+        :grupos="grupos" 
+        :carreras="carreras" 
+        :periodos="periodos" 
+        :staff="staff" 
+        :alumnos="alumnos" 
+        :periodoActivoId="periodoActivo?.id"
+        @actualizar="cargarTodo" 
+        @toast="mostrarToast"
         @ver-alumnos="id => { seccion = 'alumnos' }"
       />
 
       <!-- ALUMNOS -->
       <TabAlumnos 
         v-if="seccion === 'alumnos'"
-        :alumnos="alumnos" :carreras="carreras" :grupos="grupos"
-        @actualizar="cargarTodo" @toast="mostrarToast" @abrir-reset="abrirReset"
+        :alumnos="alumnos" 
+        :carreras="carreras" 
+        :grupos="grupos"
+        @actualizar="cargarTodo" 
+        @toast="mostrarToast" 
+        @abrir-reset="abrirReset"
       />
 
       <!-- PERSONAL -->
       <TabPersonal
         v-if="seccion === 'personal'"
-        :staff="staff" :carreras="carreras" :grupos="grupos"
-        @actualizar="cargarTodo" @toast="mostrarToast" @abrir-reset="abrirReset"
+        :staff="staff" 
+        :carreras="carreras" 
+        :grupos="grupos"
+        @actualizar="cargarTodo" 
+        @toast="mostrarToast" 
+        @abrir-reset="abrirReset"
       />
 
       <!-- ALERTAS -->
       <TabAlertas 
         v-if="seccion === 'alertas'"
         :alertas="alertas"
-        @actualizar="cargarTodo" @navegar="destino => { seccion = destino }"
+        @actualizar="cargarTodo" 
+        @navegar="destino => { seccion = destino }"
       />
 
     </template>
   </main>
 
   <!-- =====================================================
-       MODALES GLOBALES (Compartidos entre componentes)
+        MODALES GLOBALES (Compartidos entre componentes)
   ====================================================== -->
 
   <!-- MODAL CAMBIAR ESTATUS SOLICITUD -->
@@ -326,7 +412,6 @@ onMounted(cargarTodo)
 
 </div>
 </template>
-
 
 <style>
 /* Estilos globales para todo el dashboard y sus componentes hijos */

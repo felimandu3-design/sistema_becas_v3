@@ -18,33 +18,62 @@ class SolicitudBecaController extends Controller
     }
 
     // SOLICITUDES POR CARRERA ASIGNADA (Admin / Profesor / Jefe)
-    public function porCarreraAsignada(Request $request) {
+    public function porCarreraAsignada(Request $request) 
+{
+    try {
         $usuario = $request->user();
 
-        if (!$usuario) return response()->json(['message' => 'Usuario no autenticado.'], 401);
-
-        // 1. Buscamos en la tabla secundaria (asignaciones_carrera)
-        $carreras = DB::table('asignaciones_carrera')->where('user_id', $usuario->id)->pluck('carrera_id')->toArray();
-
-        // 2. Agregamos la carrera principal del perfil (si tiene una)
-        if ($usuario->carrera_id) {
-            $carreras[] = $usuario->carrera_id;
+        if (!$usuario) {
+            return response()->json(['message' => 'Usuario no autenticado.'], 401);
         }
 
-        // 3. Limpiamos repetidos y vacíos
-        $carreras = collect($carreras)->filter()->unique()->values();
+        // 1. Obtener el grupo_id asignado al profesor (desde su propio registro en usuario)
+        $grupoId = $usuario->grupo_id;
 
-        if ($carreras->isEmpty()) {
-            return response()->json(['data' => [], 'message' => 'No tienes carreras asignadas.']);
+        // Si no está en el usuario, intentamos consultar en la tabla grupos con las columnas reales de tu DB
+        if (!$grupoId && \Illuminate\Support\Facades\Schema::hasColumn('grupos', 'user_id')) {
+            $grupo = \Illuminate\Support\Facades\DB::table('grupos')
+                ->where('user_id', $usuario->id)
+                ->first();
+            $grupoId = $grupo ? $grupo->id : null;
         }
 
-        // 4. Hacemos la consulta cruzando la información
-       $solicitudes = Solicitud::with(['usuario', 'convocatoria.periodo', 'carrera', 'grupoRelacion', 'documentos'])
-            ->whereIn('carrera_id', $carreras)
-            ->orderByDesc('id')->get();
+        if (!$grupoId) {
+            return response()->json(['data' => [], 'message' => 'No tienes un grupo asignado como tutor.']);
+        }
+
+        // 2. Obtener IDs de los alumnos appartenecientes a ese grupo
+        $alumnosIds = \Illuminate\Support\Facades\DB::table('users')
+            ->where('grupo_id', $grupoId)
+            ->pluck('id')
+            ->toArray();
+
+        if (empty($alumnosIds)) {
+            return response()->json(['data' => []]);
+        }
+
+        // 3. Consultar las solicitudes de esos alumnos
+        // Detecta automáticamente si en la tabla solicitudes usas 'user_id' o 'alumno_id'
+        $columnaFK = \Illuminate\Support\Facades\Schema::hasColumn('solicitudes', 'alumno_id') 
+            ? 'alumno_id' 
+            : (\Illuminate\Support\Facades\Schema::hasColumn('solicitudes_becas', 'alumno_id') ? 'alumno_id' : 'user_id');
+
+        $solicitudes = \App\Models\Solicitud::with(['usuario', 'convocatoria.periodo', 'carrera', 'grupoRelacion', 'documentos'])
+            ->whereIn($columnaFK, $alumnosIds)
+            ->orderByDesc('id')
+            ->get();
 
         return response()->json(['data' => $solicitudes]);
+
+    } catch (\Throwable $th) {
+        return response()->json([
+            'status' => 'error',
+            'message' => $th->getMessage(),
+            'file' => $th->getFile(),
+            'line' => $th->getLine()
+        ], 500);
     }
+}
 
     // VER EXPEDIENTE
     public function show(Request $request, Solicitud $solicitud) {
@@ -57,23 +86,21 @@ class SolicitudBecaController extends Controller
     }
 
     // ACTUALIZAR ESTADO
-    public function actualizarEstatus(Request $request, Solicitud $solicitud) {
-        if (!$this->puedeRevisar($request, $solicitud)) {
-            return response()->json(['message' => 'No tienes permiso para modificar esta solicitud.'], 403);
-        }
+    public function actualizarEstado(Request $request, $id)
+{
+    $request->validate([
+        'estado' => 'required|string'
+    ]);
 
-        $validated = $request->validate([
-            'estado' => 'required|string|in:PENDIENTE,EN_REVISION,DOCUMENTACION_INCOMPLETA,ACEPTADA,RECHAZADA',
-        ]);
+    $solicitud = Solicitud::findOrFail($id);
+    $solicitud->estado = $request->estado;
+    $solicitud->save();
 
-        $solicitud->update([
-            'estado' => $validated['estado'],
-            'revisado_por' => $request->user()->id,
-            'fecha_revision' => now(),
-        ]);
-
-        return response()->json(['message' => 'Estado actualizado correctamente.', 'data' => $solicitud->fresh()]);
-    }
+    return response()->json([
+        'message' => 'Estado actualizado correctamente',
+        'solicitud' => $solicitud
+    ]);
+}
 
     // DICTAMINAR
     public function dictaminar(Request $request, Solicitud $solicitud) {
