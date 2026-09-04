@@ -106,6 +106,7 @@ Route::middleware('auth:sanctum')->group(function () {
     /* --- ADMIN / JEFE DE CARRERA --- */
     Route::prefix('admin')->middleware('role:admin')->group(function () {
         Route::get('/solicitudes', [SolicitudBecaController::class, 'porCarreraAsignada']);
+        Route::get('/grupos', [GrupoController::class, 'index']);
         Route::patch('/solicitudes/{solicitud}/estatus', [SolicitudBecaController::class, 'actualizarEstatus']);
         Route::patch('/solicitudes/{solicitud}/dictamen', [SolicitudBecaController::class, 'dictaminar']);
         Route::patch('/documentos/{documento}/observar', [DocumentoController::class, 'solicitarCorreccion']);

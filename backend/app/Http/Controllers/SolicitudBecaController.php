@@ -11,14 +11,22 @@ class SolicitudBecaController extends Controller
 {
     // TODAS LAS SOLICITUDES - SUPERADMIN
     public function todas(Request $request) {
-        $solicitudes = Solicitud::with(['usuario', 'convocatoria', 'carrera', 'grupoRelacion', 'documentos'])
-            ->orderByDesc('id')->get();
+    $solicitudes = Solicitud::with([
+        'usuario.carrera',
+        'usuario.grupoRelacion.carrera',
+        'convocatoria',
+        'carrera',
+        'grupoRelacion.carrera',
+        'documentos'
+    ])
+    ->orderByDesc('id')
+    ->get();
 
-        return response()->json(['data' => $solicitudes]);
-    }
+    return response()->json(['data' => $solicitudes]);
+}
 
     // SOLICITUDES POR CARRERA ASIGNADA (Admin / Profesor / Jefe)
-    public function porCarreraAsignada(Request $request) 
+    public function porCarreraAsignada(Request $request)
 {
     try {
         $usuario = $request->user();
@@ -27,50 +35,56 @@ class SolicitudBecaController extends Controller
             return response()->json(['message' => 'Usuario no autenticado.'], 401);
         }
 
-        // 1. Obtener el grupo_id asignado al profesor (desde su propio registro en usuario)
-        $grupoId = $usuario->grupo_id;
+        // 1. Recopilar todos los IDs de carrera asociados al Jefe/Admin
+        $carrerasIds = [];
 
-        // Si no está en el usuario, intentamos consultar en la tabla grupos con las columnas reales de tu DB
-        if (!$grupoId && \Illuminate\Support\Facades\Schema::hasColumn('grupos', 'user_id')) {
-            $grupo = \Illuminate\Support\Facades\DB::table('grupos')
-                ->where('user_id', $usuario->id)
-                ->first();
-            $grupoId = $grupo ? $grupo->id : null;
+        if ($usuario->carrera_id) {
+            $carrerasIds[] = $usuario->carrera_id;
         }
 
-        if (!$grupoId) {
-            return response()->json(['data' => [], 'message' => 'No tienes un grupo asignado como tutor.']);
+        // Si existen carreras asignadas en tabla pivote
+        if (method_exists($usuario, 'carrerasAsignadas') && $usuario->carrerasAsignadas()->exists()) {
+            $carrerasIds = array_merge($carrerasIds, $usuario->carrerasAsignadas()->pluck('carrera_id')->toArray());
         }
 
-        // 2. Obtener IDs de los alumnos appartenecientes a ese grupo
-        $alumnosIds = \Illuminate\Support\Facades\DB::table('users')
-            ->where('grupo_id', $grupoId)
-            ->pluck('id')
-            ->toArray();
+        $carrerasIds = array_unique(array_filter($carrerasIds));
 
-        if (empty($alumnosIds)) {
-            return response()->json(['data' => []]);
+        // 2. Consultar solicitudes cruzando la carrera por solicitud, por usuario y por grupo
+        $query = \App\Models\Solicitud::with([
+            'usuario.carrera',
+            'usuario.grupoRelacion.carrera',
+            'convocatoria.periodo',
+            'carrera',
+            'grupoRelacion.carrera',
+            'documentos'
+        ]);
+
+        if (!empty($carrerasIds)) {
+            $query->where(function ($q) use ($carrerasIds) {
+                // Carrera directa en la solicitud
+                $q->whereIn('carrera_id', $carrerasIds)
+                  // O carrera del alumno que creó la solicitud
+                  ->orWhereHas('usuario', function ($qUser) use ($carrerasIds) {
+                      $qUser->whereIn('carrera_id', $carrerasIds);
+                  })
+                  // O carrera a través del grupo del alumno
+                  ->orWhereHas('usuario.grupoRelacion', function ($qGrupo) use ($carrerasIds) {
+                      $qGrupo->whereIn('carrera_id', $carrerasIds);
+                  });
+            });
         }
 
-        // 3. Consultar las solicitudes de esos alumnos
-        // Detecta automáticamente si en la tabla solicitudes usas 'user_id' o 'alumno_id'
-        $columnaFK = \Illuminate\Support\Facades\Schema::hasColumn('solicitudes', 'alumno_id') 
-            ? 'alumno_id' 
-            : (\Illuminate\Support\Facades\Schema::hasColumn('solicitudes_becas', 'alumno_id') ? 'alumno_id' : 'user_id');
+        $solicitudes = $query->orderByDesc('id')->get();
 
-        $solicitudes = \App\Models\Solicitud::with(['usuario', 'convocatoria.periodo', 'carrera', 'grupoRelacion', 'documentos'])
-            ->whereIn($columnaFK, $alumnosIds)
-            ->orderByDesc('id')
-            ->get();
-
-        return response()->json(['data' => $solicitudes]);
+        return response()->json([
+            'data' => $solicitudes,
+            'carreras_detectadas' => $carrerasIds
+        ]);
 
     } catch (\Throwable $th) {
         return response()->json([
             'status' => 'error',
-            'message' => $th->getMessage(),
-            'file' => $th->getFile(),
-            'line' => $th->getLine()
+            'message' => $th->getMessage()
         ], 500);
     }
 }
@@ -141,8 +155,6 @@ class SolicitudBecaController extends Controller
         
         if (!$usuario) return false;
         if ($usuario->role === 'superadmin') return true;
-        
-        // Agregué 'jefe' y 'jefe_carrera' por si las dudas con los roles
         if (!in_array($usuario->role, ['admin', 'profesor', 'jefe', 'jefe_carrera'], true)) return false; 
 
         // 1. Buscamos en la tabla pivot

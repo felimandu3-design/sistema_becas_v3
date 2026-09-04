@@ -21,9 +21,7 @@ class Grupo extends Model
 
     public function carrera()
     {
-        return $this->belongsTo(
-            Carrera::class
-        );
+        return $this->belongsTo(Carrera::class, 'carrera_id');
     }
 
     public function periodo()

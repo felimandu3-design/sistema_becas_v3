@@ -92,4 +92,20 @@ class AuthController extends Controller
     );
     }
 
+    // En AuthController.php
+    public function me(Request $request)
+    {
+        $user = $request->user();
+
+        $user->load([
+        'carrera',
+        'grupo.carrera'
+    ]);
+
+    return response()->json([
+        'status' => 'success',
+        'data' => $user
+    ]);
+}
+
 }

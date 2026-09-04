@@ -10,43 +10,45 @@ use Illuminate\Validation\Rule;
 class GrupoController extends Controller
 {
     public function index(Request $request)
-    {
-        $query = Grupo::query()
-            ->with([
-                'carrera:id,nombre',
-                'periodo:id,nombre',
-                'tutor:id,name,email'
-            ])
-            ->withCount('alumnos');
+{
+    $user = $request->user();
 
-        if ($request->filled('carrera_id')) {
-            $query->where(
-                'carrera_id',
-                $request->carrera_id
-            );
-        }
+    $query = Grupo::query()
+        ->with([
+            'carrera:id,nombre',
+            'periodo:id,nombre',
+            'tutor:id,name,email'
+        ])
+        ->withCount('alumnos');
 
-        if ($request->filled('periodo_id')) {
-            $query->where(
-                'periodo_id',
-                $request->periodo_id
-            );
-        }
+    /*
+    |--------------------------------------------------------------------------
+    | FILTRO AUTOMÁTICO SEGÚN ROL / CARRERA ASIGNADA
+    |--------------------------------------------------------------------------
+    */
 
-        if ($request->filled('estado')) {
-            $query->where(
-                'estado',
-                $request->estado
-            );
-        }
-
-        return response()->json([
-            'status' => 'success',
-            'data' => $query
-                ->orderBy('nombre')
-                ->get()
-        ]);
+    if ($user && $user->role !== 'superadmin' && $user->carrera_id) {
+        $query->where('carrera_id', $user->carrera_id);
     }
+    elseif ($request->filled('carrera_id')) {
+        $query->where('carrera_id', $request->carrera_id);
+    }
+
+    if ($request->filled('periodo_id')) {
+        $query->where('periodo_id', $request->periodo_id);
+    }
+
+    if ($request->filled('estado')) {
+        $query->where('estado', $request->estado);
+    }
+
+    return response()->json([
+        'status' => 'success',
+        'data' => $query
+            ->orderBy('nombre')
+            ->get()
+    ]);
+}
 
     public function store(Request $request)
     {

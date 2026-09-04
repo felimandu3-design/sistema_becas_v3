@@ -2,21 +2,13 @@
 import { ref, computed } from 'vue'
 
 const props = defineProps({
-    solicitudes: {
-        type: Array,
-        default: () => []
-    },
-    cargando: {
-        type: Boolean,
-        default: false
-    },
-    error: {
-        type: String,
-        default: ''
-    }
-})
+    solicitudes: { type: Array, default: () => [] },
+    grupoSeleccionado: { type: Object, default: null },
+    cargando: { type: Boolean, default: false },
+    error: { type: String, default: null }
+});
 
-const emit = defineEmits(['recargar', 'revisar'])
+const emit = defineEmits(['recargar', 'revisar', 'volver']);
 
 // Variables locales para filtros
 const filtroEstatus = ref('TODOS')
@@ -56,18 +48,20 @@ function claseEstado(estado) {
 }
 
 function alumnoDe(solicitud) {
-    // Agregamos 'usuario' para que empate con la relación de Laravel
     return solicitud?.usuario || solicitud?.user || solicitud?.alumno || {}
 }
 
 function grupoDe(solicitud) {
-    // Buscamos el grupo en todas las posibles relaciones de Laravel
-    return solicitud?.grupo_relacion?.nombre || 
-           solicitud?.grupoRelacion?.nombre || 
-           solicitud?.grupo?.nombre || 
-           solicitud?.grupo || 
-           alumnoDe(solicitud).grupo || 
-           '—'
+    const g = solicitud?.grupo_relacion || 
+              solicitud?.grupoRelacion || 
+              solicitud?.grupo || 
+              alumnoDe(solicitud)?.grupo
+
+    if (typeof g === 'object' && g !== null) {
+        return g.clave || g.nombre || '—'
+    }
+    
+    return g || '—'
 }
 
 function periodoDe(solicitud) {
@@ -93,15 +87,40 @@ const solicitudesFiltradas = computed(() => {
     const termino = terminoBusqueda.value.trim().toLowerCase()
 
     return props.solicitudes.filter(solicitud => {
+        // 1. FILTRAR POR GRUPO SELECCIONADO (Si hay uno activo)
+        if (props.grupoSeleccionado) {
+            const targetId = props.grupoSeleccionado.id
+            const targetClave = String(props.grupoSeleccionado.clave || props.grupoSeleccionado.nombre || '').trim().toLowerCase()
+
+            const alumno = alumnoDe(solicitud)
+            
+            // Comprobación por ID
+            const matchId = 
+                solicitud.grupo_id == targetId || 
+                solicitud.grupo?.id == targetId ||
+                alumno.grupo_id == targetId ||
+                alumno.grupo?.id == targetId
+
+            // Comprobación por Clave/Nombre (ej: "7VSC1")
+            const grupoNombreStr = String(grupoDe(solicitud)).trim().toLowerCase()
+            const matchClave = targetClave !== '' && grupoNombreStr === targetClave
+
+            if (!matchId && !matchClave) {
+                return false
+            }
+        }
+
+        // 2. FILTRAR POR ESTATUS
         const estado = normalizarEstado(solicitud.estado || solicitud.estatus)
         const coincideEstado = filtroEstatus.value === 'TODOS' || estado === filtroEstatus.value
 
+        // 3. BÚSQUEDA POR TEXTO (Nombre, Matrícula, Folio, etc.)
         const alumno = alumnoDe(solicitud)
         const textoBusqueda = [
             alumno.name,
             alumno.matricula,
-            grupoDe(solicitud), // Usamos la nueva función para el buscador
-            folioDe(solicitud), // Agregado el folio para que lo encuentre al buscar BEC-000...
+            grupoDe(solicitud),
+            folioDe(solicitud),
             solicitud.convocatoria?.nombre,
             solicitud.convocatoria?.periodo?.nombre,
         ].filter(Boolean).join(' ').toLowerCase()
@@ -115,24 +134,45 @@ const solicitudesFiltradas = computed(() => {
 
 <template>
     <section id="solicitudes" class="requests-card">
-        <!-- ENCABEZADO Y BOTÓN ACTUALIZAR -->
+        <!-- ENCABEZADO, INDICADOR DE GRUPO Y BOTONES DE ACCIÓN -->
         <div class="requests-heading">
             <div>
-                <span class="eyebrow">SOLICITUDES</span>
-                <h2>Alumnos de mi carrera</h2>
+                <!-- Muestra la etiqueta y clave del grupo si existe -->
+                <template v-if="grupoSeleccionado">
+                    <span class="eyebrow-grupo">FILTRANDO POR GRUPO</span>
+                    <h2 class="grupo-nombre">{{ grupoSeleccionado.nombre || grupoSeleccionado.clave }}</h2>
+                </template>
+                <template v-else>
+                    <span class="eyebrow">SOLICITUDES</span>
+                    <h2>Alumnos de mi carrera</h2>
+                </template>
+
                 <p>{{ solicitudesFiltradas.length }} resultado(s)</p>
             </div>
-            <button 
-                type="button" 
-                class="refresh-button" 
-                @click="emit('recargar')"
-            >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M20 11a8 8 0 1 0-2 5.3" />
-                    <path d="M20 4v7h-7" />
-                </svg>
-                Actualizar
-            </button>
+            
+            <div class="header-buttons">
+                <button 
+                    type="button" 
+                    class="refresh-button" 
+                    @click="$emit('recargar')"
+                >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 11a8 8 0 1 0-2 5.3" />
+                        <path d="M20 4v7h-7" />
+                    </svg>
+                    Actualizar
+                </button>
+
+                <!-- BOTÓN REGRESAR A GRUPOS -->
+                <button 
+                    v-if="grupoSeleccionado"
+                    type="button" 
+                    class="back-button" 
+                    @click="$emit('volver')"
+                >
+                    ← Ver todos los grupos
+                </button>
+            </div>
         </div>
 
         <!-- FILTROS -->
@@ -170,7 +210,7 @@ const solicitudesFiltradas = computed(() => {
             <div class="empty-icon error">!</div>
             <strong>No se pudieron cargar las solicitudes</strong>
             <span>{{ error }}</span>
-            <button type="button" class="primary-button" style="margin-top: 15px;" @click="emit('recargar')">
+            <button type="button" class="primary-button" style="margin-top: 15px;" @click="$emit('recargar')">
                 Intentar nuevamente
             </button>
         </div>
@@ -206,16 +246,15 @@ const solicitudesFiltradas = computed(() => {
                         <td>
                             <div class="student-cell">
                                 <div class="student-avatar">
-                                    {{ (alumnoDe(solicitud).name || 'A').charAt(0).toUpperCase() }}
+                                    {{ (alumnoDe(solicitud).name || alumnoDe(solicitud).nombre || 'A').charAt(0).toUpperCase() }}
                                 </div>
                                 <div>
-                                    <strong>{{ alumnoDe(solicitud).name || 'Alumno' }}</strong>
+                                    <strong>{{ alumnoDe(solicitud).name || alumnoDe(solicitud).nombre || 'Alumno' }}</strong>
                                     <span>{{ folioDe(solicitud) }}</span>
                                 </div>
                             </div>
                         </td>
                         <td>{{ alumnoDe(solicitud).matricula || '—' }}</td>
-                        <!-- Usamos la función grupoDe() -->
                         <td>{{ grupoDe(solicitud) }}</td>
                         <td>{{ periodoDe(solicitud) }}</td>
                         <td>
@@ -233,7 +272,7 @@ const solicitudesFiltradas = computed(() => {
                             <button 
                                 type="button" 
                                 class="review-button" 
-                                @click="emit('revisar', solicitud)"
+                                @click="$emit('revisar', solicitud)"
                             >
                                 Revisar
                             </button>
@@ -246,6 +285,67 @@ const solicitudesFiltradas = computed(() => {
 </template>
 
 <style scoped>
+/* ================================================================
+   CONTENEDOR GENERAL DE LA SECCIÓN
+================================================================ */
+.tabla-seccion-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* ================================================================
+   TARJETA FILTRO POR GRUPO (NUEVO BLOQUE SUPERIOR)
+================================================================ */
+.grupo-filtro-card {
+    border: 1px solid #e3e7e4;
+    border-radius: 21px;
+    background: #fff;
+    padding: 20px 25px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 13px 38px rgba(28, 40, 33, .05);
+}
+
+.eyebrow-grupo {
+    display: block;
+    color: #8a918d;
+    font-size: 8px;
+    font-weight: 850;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+}
+
+.grupo-nombre {
+    margin: 4px 0 0;
+    font-size: 20px;
+    font-weight: 850;
+    color: #2e3531;
+}
+
+.back-button {
+    height: 37px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #e1e5e2;
+    border-radius: 10px;
+    background: #f6f8f7;
+    color: #4a524e;
+    font-size: 9px;
+    font-weight: 850;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.back-button:hover {
+    background: #edf2ee;
+    color: #247548;
+    border-color: #d2ded5;
+}
+
 /* ================================================================
    REQUESTS CARD
 ================================================================ */
@@ -467,7 +567,7 @@ tbody tr:hover {
     height: 32px;
     padding: 0 12px;
     border: 1px solid #dbe5de;
-    border-radius: 9px;
+    border-radius: 99px;
     background: #f4f8f5;
     color: #267348;
     font-size: 8px;
@@ -547,13 +647,20 @@ tbody tr:hover {
     color: #fff;
 }
 
+.header-buttons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 /* RESPONSIVE */
 @media (max-width: 800px) {
     .filters { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 520px) {
-    .requests-heading { padding: 19px 17px 15px; }
+    .requests-heading,
+    .grupo-filtro-card { padding: 19px 17px 15px; }
     .filters { padding: 12px 16px; }
 }
 </style>

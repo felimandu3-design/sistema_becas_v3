@@ -16,6 +16,7 @@ defineEmits(['seleccionar'])
           <th>ALUMNO</th>
           <th>GRUPO</th>
           <th>ESTADO</th>
+          <th>DESCUENTO</th>
           <th>ACCIONES</th>
         </tr>
       </thead>
@@ -61,8 +62,17 @@ defineEmits(['seleccionar'])
               {{ (solicitud.estado || solicitud.status || 'PENDIENTE').toUpperCase() }}
             </span>
           </td>
+          
+          <!-- 5. Porcentaje Descuento -->
+          <td>
+            <span v-if="solicitud.porcentaje_descuento" class="font-bold text-green-700">
+              {{ solicitud.porcentaje_descuento }}%
+            </span>
+            <span v-else class="text-gray-400 text-xs">N/A</span>
+          </td>
 
-          <!-- 5. ACCIONES -->
+          <!-- 6. ACCIONES -->
+          <td>
           <button 
             type="button" 
                 class="px-4 py-2 bg-[#eaf5ee] text-[#1b6339] text-xs font-bold rounded-xl hover:bg-[#d8ebd9] hover:text-[#124728] transition-colors duration-200"
@@ -70,6 +80,7 @@ defineEmits(['seleccionar'])
             >
             Ver detalle
             </button>
+            </td>
         </tr>
       </tbody>
     </table>

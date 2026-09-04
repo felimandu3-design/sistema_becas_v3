@@ -83,45 +83,55 @@ const totalAlumnosConSolicitud = computed(() => {
   return Array.isArray(solicitudes.value) ? solicitudes.value.length : 0
 })
 
-// 2. Obtener el grupo directamente del objeto usuario prop (o fallback a solicitudes)
+// 2. Obtener el grupo directamente del objeto usuario prop
 const grupoAsignado = computed(() => {
-  const u = props.usuario?.user || props.usuario
-
-  // Intenta leer el nombre del grupo asignado en el usuario
-  if (u?.grupo) {
-    return typeof u.grupo === 'object' 
-      ? u.grupo.nombre 
-      : u.grupo
-  }
-  
-  if (u?.grupo_relacion) {
-    return typeof u.grupo_relacion === 'object'
-      ? u.grupo_relacion.nombre
-      : u.grupo_relacion
+  // 1. Intentar obtenerlo desde el objeto de usuario
+  if (props.usuario?.grupo?.nombre) return props.usuario.grupo.nombre
+  if (props.usuario?.grupo?.clave) return props.usuario.grupo.clave
+  if (typeof props.usuario?.grupo === 'string' && props.usuario.grupo.trim() !== '') {
+    return props.usuario.grupo
   }
 
-  // Fallback si viene en las solicitudes
-  if (Array.isArray(solicitudes.value) && solicitudes.value.length > 0) {
-    return solicitudes.value[0].alumno?.grupo?.nombre || solicitudes.value[0].alumno?.grupo || 'Sin asignación'
+  // 2. Fallback al recargar (F5): Si el usuario no trae el grupo cargado,
+  if (solicitudes.value && solicitudes.value.length > 0) {
+    const primeraSol = solicitudes.value[0]
+    const grupoEncontrado = primeraSol.usuario?.grupo || primeraSol.grupo || primeraSol.alumno?.grupo
+    if (grupoEncontrado) return grupoEncontrado
   }
 
-  return 'Sin grupo'
+  // 3. Fallback final
+  return 'Sin asignación'
 })
 
 // Carrera del grupo (Informativa)
+// Carrera del grupo asignado (Vista Tutor)
 const carreraAsignada = computed(() => {
   const u = props.usuario?.user || props.usuario
-  
-  // 1. Si el grupo del profesor trae la carrera
+
+  // 1. Si el profesor/tutor trae la carrera directa o a través de su grupo asignado
+  if (u?.carrera?.nombre) return u.carrera.nombre
   if (u?.grupo?.carrera?.nombre) return u.grupo.carrera.nombre
   if (u?.grupo_relacion?.carrera?.nombre) return u.grupo_relacion.carrera.nombre
 
-  // 2. Si la carrera viene en la primera solicitud del alumno
-  if (Array.isArray(solicitudes.value) && solicitudes.value.length > 0) {
-    return solicitudes.value[0].alumno?.carrera?.nombre || 'ISC'
+  // 2. Extraer arreglo de solicitudes (manejando si viene array directo o paginado/en .data)
+  const lista = Array.isArray(solicitudes.value) 
+    ? solicitudes.value 
+    : (solicitudes.value?.data || [])
+
+  // 3. Buscar la carrera en la primera solicitud del grupo de alumnos
+  if (lista.length > 0) {
+    const primeraSol = lista[0]
+    return (
+      primeraSol.carrera?.nombre ||
+      primeraSol.usuario?.carrera?.nombre ||
+      primeraSol.usuario?.grupo_relacion?.carrera?.nombre ||
+      primeraSol.grupo_relacion?.carrera?.nombre ||
+      primeraSol.alumno?.carrera?.nombre ||
+      'Sin asignación'
+    )
   }
 
-  return 'ISC'
+  return 'Sin asignación'
 })
 
 
@@ -268,7 +278,6 @@ const cambiarEstadoSolicitud = async (id, nuevoEstado) => {
         </div>
       </section>
 
-      <!-- TARJETAS DE MÉTRICAS -->
 <!-- TARJETAS DE MÉTRICAS -->
 <section class="stats">
   <article class="stat">
