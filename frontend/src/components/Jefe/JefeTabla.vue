@@ -237,6 +237,7 @@ const solicitudesFiltradas = computed(() => {
                         <th>Grupo</th>
                         <th>Periodo</th>
                         <th>Documentos</th>
+                        <th>Descuento</th>
                         <th>Estado</th>
                         <th class="text-right">Acción</th>
                     </tr>
@@ -263,6 +264,15 @@ const solicitudesFiltradas = computed(() => {
                                 <span>archivo(s)</span>
                             </div>
                         </td>
+
+                        <!-- CELDA DE DESCUENTO ESTILO TUTOR -->
+                        <td>
+                            <div v-if="solicitud.porcentaje_beca || solicitud.porcentaje_descuento" class="discount-badge">
+                                {{ parseFloat(solicitud.porcentaje_beca || solicitud.porcentaje_descuento) }}%
+                            </div>
+                            <span v-else class="no-discount">N/A</span>
+                        </td>
+
                         <td>
                             <span class="status-badge" :class="claseEstado(solicitud.estado || solicitud.estatus)">
                                 {{ textoEstado(solicitud.estado || solicitud.estatus) }}
@@ -543,6 +553,18 @@ tbody tr:hover {
     color: #9fa5a1;
     font-size: 8px;
     font-weight: 500;
+}
+
+/* DESCUENTO - ESTILO TUTOR EXACTO */
+.discount-badge {
+    display: inline-block;
+    font-weight: 850;
+    color: #216841;
+}
+
+.no-discount {
+    color: #a0a5a2;
+    font-size: 9px;
 }
 
 .status-badge {

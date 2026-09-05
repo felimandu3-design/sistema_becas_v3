@@ -104,11 +104,13 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     /* --- ADMIN / JEFE DE CARRERA --- */
+
     Route::prefix('admin')->middleware('role:admin')->group(function () {
         Route::get('/solicitudes', [SolicitudBecaController::class, 'porCarreraAsignada']);
         Route::get('/grupos', [GrupoController::class, 'index']);
-        Route::patch('/solicitudes/{solicitud}/estatus', [SolicitudBecaController::class, 'actualizarEstatus']);
-        Route::patch('/solicitudes/{solicitud}/dictamen', [SolicitudBecaController::class, 'dictaminar']);
+        Route::patch('/solicitudes/{solicitud}/estatus', [DictamenController::class, 'guardar']);
+        Route::post('/solicitudes/{solicitud}/dictamen', [DictamenController::class, 'guardar']);
+        Route::patch('/solicitudes/{solicitud}/dictamen', [DictamenController::class, 'guardar']);
         Route::patch('/documentos/{documento}/observar', [DocumentoController::class, 'solicitarCorreccion']);
         Route::get('/alumnos', [AlumnoGestionController::class, 'index']);
         Route::patch('/alumnos/{alumno}', [AlumnoGestionController::class, 'actualizar']);
@@ -135,6 +137,7 @@ Route::prefix('master')->middleware(['auth:sanctum', 'role:superadmin'])->group(
     Route::get('/alumnos', [AlumnoGestionController::class, 'index']);
     Route::patch('/alumnos/{alumno}', [AlumnoGestionController::class, 'actualizar']);
     
+    Route::get('/staff', [StaffController::class, 'index']);
     Route::get('/staff', [RolAsignacionController::class, 'listarStaff']);
     Route::post('/staff', [RolAsignacionController::class, 'crearStaff']);
     Route::patch('/staff/{usuario}', [RolAsignacionController::class, 'actualizarStaff']);

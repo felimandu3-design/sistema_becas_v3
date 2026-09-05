@@ -10,9 +10,9 @@ const props = defineProps({
 
 const emit = defineEmits(['actualizar', 'toast', 'abrir-reset'])
 
-const modal = ref(null) // Controla qué modal está abierto: 'personal', 'editar', etc.
+const modal = ref(null)
+const mostrarPassword = ref(false)
 
-// Estado del formulario de creación
 const staffForm = ref({
   name: '',
   email: '',
@@ -22,7 +22,6 @@ const staffForm = ref({
   grupo_id: ''
 })
 
-// Estado del formulario de edición
 const editForm = ref({
   id: null,
   name: '',
@@ -32,13 +31,11 @@ const editForm = ref({
   grupo_id: ''
 })
 
-// Limpiar selecciones no correspondientes al cambiar de rol en la edición
 watch(() => editForm.value.role, (nuevoRol) => {
   if (nuevoRol === 'admin') editForm.value.grupo_id = ''
   if (nuevoRol === 'profesor') editForm.value.carrera_id = ''
 })
 
-// Limpiar selecciones no correspondientes al cambiar de rol en la creación
 watch(() => staffForm.value.role, (nuevoRol) => {
   if (nuevoRol === 'admin') staffForm.value.grupo_id = ''
   if (nuevoRol === 'profesor') staffForm.value.carrera_id = ''
@@ -62,6 +59,7 @@ function nuevoPersonal() {
     carrera_id: '',
     grupo_id: ''
   }
+  mostrarPassword.value = false
   modal.value = 'personal'
 }
 
@@ -92,10 +90,8 @@ async function crearPersonal() {
       grupo_id: grupoId,
     }
 
-    //  Petición POST a la ruta de creación (sin userId)
     await api.post('/master/staff', payload)
     
-    // Limpiar formulario y cerrar modal
     modal.value = null
     staffForm.value = {
       name: '',
@@ -136,20 +132,7 @@ async function guardarEdicion() {
       grupos: grupoId ? [grupoId] : []
     }
 
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token') || localStorage.getItem('access_token')
-
-    const config = {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      },
-      withCredentials: true
-    }
-
-   await api.put(`http://localhost:8000/api/master/staff/${userId}`, payload, {
-      withCredentials: true
-    })
+    await api.put(`/master/staff/${userId}`, payload)
 
     modal.value = null
     emit('actualizar')
@@ -220,7 +203,33 @@ async function eliminarPersonal(u) {
         
         <label>Nombre <input v-model="staffForm.name" required /></label>
         <label>Correo <input v-model="staffForm.email" type="email" required /></label>
-        <label>Contraseña temporal <input v-model="staffForm.password" type="password" minlength="8" required /></label>
+        
+        <!-- Contraseña con botón Ojo -->
+        <label>Contraseña temporal
+          <div class="password-wrapper">
+            <input 
+              v-model="staffForm.password" 
+              :type="mostrarPassword ? 'text' : 'password'" 
+              minlength="8" 
+              required 
+            />
+            <button 
+              type="button" 
+              class="eye-btn" 
+              @click="mostrarPassword = !mostrarPassword"
+              title="Mostrar u ocultar contraseña"
+            >
+              <svg v-if="!mostrarPassword" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
+                <line x1="1" y1="1" x2="23" y2="23" />
+              </svg>
+            </button>
+          </div>
+        </label>
         
         <!-- Selector de Rol -->
         <label>Rol 
@@ -300,3 +309,36 @@ async function eliminarPersonal(u) {
 
   </div>
 </template>
+
+<style scoped>
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-wrapper input {
+  width: 100%;
+  padding-right: 42px;
+}
+
+.eye-btn {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+
+.eye-btn:hover {
+  color: #111827;
+}
+</style>

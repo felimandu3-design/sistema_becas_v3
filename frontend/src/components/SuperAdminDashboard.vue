@@ -160,16 +160,27 @@ async function actualizarSolicitud(nuevoEstado) {
 
 // Modal Reset Password
 const resetForm = ref({})
+const mostrarPassword = ref(false)
+const mostrarConfirmacion = ref(false)
+
 function abrirReset(u) {
   resetForm.value = { user: u, password: '', password_confirmation: '' }
+  mostrarPassword.value = false
+  mostrarConfirmacion.value = false
   modal.value = 'reset'
 }
+
 async function restablecerPassword() {
   const f = resetForm.value
   if (f.password !== f.password_confirmation) return mostrarToast('Las contraseñas no coinciden.', 'error')
   
   try {
-    await api.post('/superadmin/reset-password', { user_id: f.user.id, password: f.password, password_confirmation: f.password_confirmation })
+    await api.post('/master/reset-password', { 
+      user_id: f.user.id, 
+      password: f.password, 
+      password_confirmation: f.password_confirmation 
+    })
+    
     modal.value = null
     mostrarToast('Contraseña restablecida.')
   } catch (e) {
@@ -296,7 +307,7 @@ async function publicarResultados(convocatoriaId) {
         @abrir-solicitud="abrirSolicitud"
       />
 
-      <!-- CONVOCATORIAS (Actualizado con prop y event emit para publicación) -->
+      <!-- CONVOCATORIAS -->
       <TabConvocatorias 
         v-if="seccion === 'convocatorias'"
         :convocatorias="convocatorias" 
@@ -397,15 +408,65 @@ async function publicarResultados(convocatoriaId) {
     </div>
   </div>
 
-  <!-- MODAL RESTABLECER CONTRASEÑA -->
+  <!-- MODAL RESTABLECER CONTRASEÑA CON OJO SELECTOR -->
   <div v-if="modal === 'reset'" class="overlay" @click.self="modal = null">
     <form class="modal" @submit.prevent="restablecerPassword">
       <button type="button" class="close" @click="modal = null">×</button>
       <h2>Restablecer contraseña</h2>
       <p>{{ resetForm.user?.name }}</p>
-      
-      <label>Nueva contraseña <input v-model="resetForm.password" type="password" minlength="8" required /></label>
-      <label>Confirmar <input v-model="resetForm.password_confirmation" type="password" minlength="8" required /></label>
+
+      <label>Nueva contraseña
+        <div class="password-wrapper">
+          <input 
+            v-model="resetForm.password" 
+            :type="mostrarPassword ? 'text' : 'password'" 
+            minlength="8" 
+            required 
+          />
+          <button 
+            type="button" 
+            class="eye-btn" 
+            @click="mostrarPassword = !mostrarPassword"
+            :title="mostrarPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+          >
+            <svg v-if="!mostrarPassword" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+              <line x1="1" y1="1" x2="23" y2="23"></line>
+            </svg>
+          </button>
+        </div>
+      </label>
+
+      <label>Confirmar
+        <div class="password-wrapper">
+          <input 
+            v-model="resetForm.password_confirmation" 
+            :type="mostrarConfirmacion ? 'text' : 'password'" 
+            minlength="8" 
+            required 
+          />
+          <button 
+            type="button" 
+            class="eye-btn" 
+            @click="mostrarConfirmacion = !mostrarConfirmacion"
+            :title="mostrarConfirmacion ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+          >
+            <svg v-if="!mostrarConfirmacion" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+              <line x1="1" y1="1" x2="23" y2="23"></line>
+            </svg>
+          </button>
+        </div>
+      </label>
+
       <button class="primary submit">Cambiar contraseña</button>
     </form>
   </div>
@@ -425,9 +486,16 @@ nav{flex:1;display:flex;justify-content:center;gap:3px;overflow-x:auto}nav butto
 .profile{display:flex;align-items:center;gap:8px}.profile>div{display:flex;flex-direction:column;text-align:right}.profile strong{font-size:12px}.avatar{width:39px;height:39px;display:grid;place-items:center;border-radius:50%;background:#087846;color:#fff;font-size:12px;font-weight:900}.logout{border:1px solid #dce3df;background:#fff;color:#8e2843;border-radius:8px;padding:8px 11px;font-size:12px;font-weight:750;cursor:pointer}
 main{width:min(1280px,calc(100% - 32px));margin:auto;padding:38px 0 70px}.heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:20px}.eyebrow{display:block;color:#8a948e;font-size:11px;font-weight:900;letter-spacing:.14em}.heading h1{margin:5px 0;font-size:34px;letter-spacing:-.035em}.heading p{margin:0;color:#748078;font-size:14px}
 .context{display:flex;gap:10px}.context>div{min-width:160px;padding:11px 14px;background:#fff;border:1px solid #e0e6e2;border-radius:11px}.context span{display:block;font-size:10px;color:#8d9791;text-transform:uppercase}.context strong{display:block;margin-top:3px;font-size:12px}
-.primary,.secondary{border-radius:9px;padding:10px 14px;font-size:13px;font-weight:800;cursor:pointer}.primary{border:0;background:#087846;color:#fff}.primary:hover{background:#05683c}.secondary{border:1px solid #dce3df;background:#fff;color:#087846}
+.primary,.secondary{border-radius:99px;padding:10px 14px;font-size:13px;font-weight:800;cursor:pointer}.primary{border:0;background:#087846;color:#fff}.primary:hover{background:#05683c}.secondary{border:1px solid #dce3df;background:#fff;color:#087846}
 .filters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:11px;margin-bottom:15px;background:#fff;border:1px solid #e0e6e2;border-radius:13px}.filters.four{grid-template-columns:repeat(4,1fr)}
 input,select,textarea{width:100%;padding:11px 12px;border:1px solid #d9e1dc;border-radius:8px;background:#fff;color:#344039;font:inherit;font-size:13px;outline:none}input:focus,select:focus,textarea:focus{border-color:#6da486;box-shadow:0 0 0 3px #edf6f1}textarea{min-height:85px;resize:vertical}
+
+/* Estilos de Contraseña y Botón de Ojo */
+.password-wrapper{position:relative;display:flex;align-items:center;width:100%}
+.password-wrapper input{width:100%;padding-right:40px}
+.eye-btn{position:absolute;right:8px;background:transparent;border:0;cursor:pointer;padding:4px;display:inline-flex;align-items:center;justify-content:center;color:#6b7280;border-radius:4px;transition:color .2s}
+.eye-btn:hover{color:#087846}
+
 .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:15px}.kpis article{padding:17px;border:1px solid #e0e6e2;border-top:3px solid #65716a;border-radius:13px;background:#fff}.kpis .amber{border-top-color:#d99a25}.kpis .blue{border-top-color:#3b82b6}.kpis .green{border-top-color:#147a4a}.kpis .burgundy{border-top-color:#8e2843}.kpis span,.mini-stats span{display:block;color:#838e88;font-size:11px;font-weight:800;text-transform:uppercase}.kpis strong{display:block;margin:5px 0;font-size:28px}.kpis small{font-size:11px;color:#919a95}
 .charts{display:grid;grid-template-columns:1.25fr .85fr;gap:14px;margin-bottom:15px}.panel{background:#fff;border:1px solid #e0e6e2;border-radius:14px;overflow:hidden}.panel-title{padding:17px 18px 0}.panel-title h2{margin:4px 0;font-size:17px}.chart{height:285px;padding:14px}
 .mini-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.mini-stats article{padding:14px 16px;background:#fff;border:1px solid #e0e6e2;border-radius:11px}.mini-stats strong{display:block;margin-top:4px;font-size:21px}

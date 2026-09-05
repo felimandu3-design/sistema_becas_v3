@@ -117,37 +117,37 @@ class SolicitudBecaController extends Controller
 }
 
     // DICTAMINAR
-    public function dictaminar(Request $request, Solicitud $solicitud) {
-        if (!$this->puedeRevisar($request, $solicitud)) {
-            return response()->json(['message' => 'No tienes permiso para dictaminar esta solicitud.'], 403);
-        }
-
-        $validated = $request->validate([
-            'estado' => 'required|string|in:ACEPTADA,RECHAZADA',
-            'porcentaje_beca' => 'nullable|numeric|between:0,100',
-            'comentario_revision' => 'nullable|string|max:2000',
-        ]);
-
-        // Si es Aceptada, exigimos el porcentaje
-        if ($validated['estado'] === 'ACEPTADA' && empty($validated['porcentaje_beca'])) {
-            return response()->json(['message' => 'Debes indicar el porcentaje de beca autorizado.'], 422);
-        }
-
-        $solicitud->update([
-            'estado' => $validated['estado'],
-            'porcentaje_beca' => $validated['estado'] === 'ACEPTADA' ? $validated['porcentaje_beca'] : null,
-            'comentario_revision' => $validated['comentario_revision'] ?? null,
-            'revisado_por' => $request->user()->id,
-            'fecha_revision' => now(),
-        ]);
-
-        $solicitud->load(['usuario', 'convocatoria', 'carrera', 'grupoRelacion', 'documentos']);
-
-        return response()->json([
-            'message' => $validated['estado'] === 'ACEPTADA' ? 'Solicitud aceptada correctamente.' : 'Solicitud rechazada.',
-            'data' => $solicitud,
-        ]);
+    public function dictaminar(Request $request, Solicitud $solicitud) 
+{
+    if (!$this->puedeRevisar($request, $solicitud)) {
+        return response()->json(['message' => 'No tienes permiso para dictaminar esta solicitud.'], 403);
     }
+
+    $validated = $request->validate([
+        'estado' => 'required|string|in:ACEPTADA,RECHAZADA,INCOMPLETA,DOCUMENTACION_INCOMPLETA,EN_REVISION',
+        'porcentaje_beca' => 'nullable|numeric|between:0,100',
+        'comentario_revision' => 'nullable|string|max:2000',
+    ]);
+
+    if ($validated['estado'] === 'ACEPTADA' && empty($validated['porcentaje_beca'])) {
+        return response()->json(['message' => 'Debes indicar el porcentaje de beca autorizado.'], 422);
+    }
+
+    $solicitud->update([
+        'estado' => $validated['estado'],
+        'porcentaje_beca' => $validated['estado'] === 'ACEPTADA' ? $validated['porcentaje_beca'] : null,
+        'comentario_revision' => $validated['comentario_revision'] ?? null,
+        'revisado_por' => $request->user()->id,
+        'fecha_revision' => now(),
+    ]);
+
+    $solicitud->load(['usuario', 'convocatoria', 'carrera', 'grupoRelacion', 'documentos']);
+
+    return response()->json([
+        'message' => 'Estatus de la solicitud actualizado correctamente.',
+        'data' => $solicitud,
+    ]);
+}
 
     // VERIFICAR PERMISO PRIVADO
     private function puedeRevisar(Request $request, Solicitud $solicitud): bool {
