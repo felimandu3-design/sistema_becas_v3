@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\BecariosExport;
 
 class ConvocatoriaController extends Controller
 {
@@ -247,6 +249,35 @@ class ConvocatoriaController extends Controller
         return response()->json(['status' => 'success', 'message' => 'Convocatoria cerrada y notificada.', 'data' => $convocatoria->fresh('periodo')], 200);
     }
 
+    // SUPERADMIN: PUBLICAR RESULTADOS DEFINITIVOS
+    public function publicarResultados(Request $request, $id) {
+        $usuario = $request->user();
+        
+        // Medida de seguridad: solo el superadmin puede hacer esto
+        if ($usuario->role !== 'superadmin') {
+            return response()->json(['status' => 'error', 'message' => 'No tienes permiso para realizar esta acción.'], 403);
+        }
+
+        $convocatoria = Convocatoria::findOrFail($id);
+        
+        // Si ya están publicados, avisamos
+        if ($convocatoria->resultados_publicados) {
+            return response()->json([
+                'status' => 'warning',
+                'message' => 'Los resultados de esta convocatoria ya habían sido publicados.'
+            ], 200);
+        }
+
+        $convocatoria->resultados_publicados = true;
+        $convocatoria->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => '¡Resultados publicados exitosamente! Los alumnos ya pueden ver su dictamen final.',
+            'data' => $convocatoria
+        ]);
+    }
+
     // ELIMINAR CONVOCATORIA
     public function destroy(Convocatoria $convocatoria) {
         $rutaArchivo = $convocatoria->archivo;
@@ -315,5 +346,12 @@ class ConvocatoriaController extends Controller
         $alumnos = $this->alumnosParaNotificacion();
         if ($alumnos->isEmpty()) throw new \RuntimeException('No existen alumnos con correo.');
         Notification::send($alumnos, new ConvocatoriaCerradaNotification($convocatoria));
+    }
+    // SUPERADMIN: DESCARGAR EXCEL DE BECARIOS
+    public function exportarExcelPadron($id) {
+        $convocatoria = Convocatoria::findOrFail($id);
+        $nombreArchivo = 'Padron_Becarios_' . str_replace(' ', '_', $convocatoria->nombre) . '.xlsx';
+        
+        return Excel::download(new BecariosExport($id), $nombreArchivo);
     }
 }

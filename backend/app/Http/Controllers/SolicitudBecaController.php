@@ -11,83 +11,83 @@ class SolicitudBecaController extends Controller
 {
     // TODAS LAS SOLICITUDES - SUPERADMIN
     public function todas(Request $request) {
-    $solicitudes = Solicitud::with([
-        'usuario.carrera',
-        'usuario.grupoRelacion.carrera',
-        'convocatoria',
-        'carrera',
-        'grupoRelacion.carrera',
-        'documentos'
-    ])
-    ->orderByDesc('id')
-    ->get();
-
-    return response()->json(['data' => $solicitudes]);
-}
-
-    // SOLICITUDES POR CARRERA ASIGNADA (Admin / Profesor / Jefe)
-    public function porCarreraAsignada(Request $request)
-{
-    try {
-        $usuario = $request->user();
-
-        if (!$usuario) {
-            return response()->json(['message' => 'Usuario no autenticado.'], 401);
-        }
-
-        // 1. Recopilar todos los IDs de carrera asociados al Jefe/Admin
-        $carrerasIds = [];
-
-        if ($usuario->carrera_id) {
-            $carrerasIds[] = $usuario->carrera_id;
-        }
-
-        // Si existen carreras asignadas en tabla pivote
-        if (method_exists($usuario, 'carrerasAsignadas') && $usuario->carrerasAsignadas()->exists()) {
-            $carrerasIds = array_merge($carrerasIds, $usuario->carrerasAsignadas()->pluck('carrera_id')->toArray());
-        }
-
-        $carrerasIds = array_unique(array_filter($carrerasIds));
-
-        // 2. Consultar solicitudes cruzando la carrera por solicitud, por usuario y por grupo
-        $query = \App\Models\Solicitud::with([
+        $solicitudes = Solicitud::with([
             'usuario.carrera',
             'usuario.grupoRelacion.carrera',
-            'convocatoria.periodo',
+            'convocatoria',
             'carrera',
             'grupoRelacion.carrera',
             'documentos'
-        ]);
+        ])
+        ->orderByDesc('id')
+        ->get();
 
-        if (!empty($carrerasIds)) {
-            $query->where(function ($q) use ($carrerasIds) {
-                // Carrera directa en la solicitud
-                $q->whereIn('carrera_id', $carrerasIds)
-                  // O carrera del alumno que creó la solicitud
-                  ->orWhereHas('usuario', function ($qUser) use ($carrerasIds) {
-                      $qUser->whereIn('carrera_id', $carrerasIds);
-                  })
-                  // O carrera a través del grupo del alumno
-                  ->orWhereHas('usuario.grupoRelacion', function ($qGrupo) use ($carrerasIds) {
-                      $qGrupo->whereIn('carrera_id', $carrerasIds);
-                  });
-            });
-        }
-
-        $solicitudes = $query->orderByDesc('id')->get();
-
-        return response()->json([
-            'data' => $solicitudes,
-            'carreras_detectadas' => $carrerasIds
-        ]);
-
-    } catch (\Throwable $th) {
-        return response()->json([
-            'status' => 'error',
-            'message' => $th->getMessage()
-        ], 500);
+        return response()->json(['data' => $solicitudes]);
     }
-}
+
+    // SOLICITUDES POR CARRERA ASIGNADA (Admin / Profesor / Jefe)
+    public function porCarreraAsignada(Request $request)
+    {
+        try {
+            $usuario = $request->user();
+
+            if (!$usuario) {
+                return response()->json(['message' => 'Usuario no autenticado.'], 401);
+            }
+
+            // 1. Recopilar todos los IDs de carrera asociados al Jefe/Admin
+            $carrerasIds = [];
+
+            if ($usuario->carrera_id) {
+                $carrerasIds[] = $usuario->carrera_id;
+            }
+
+            // Si existen carreras asignadas en tabla pivote
+            if (method_exists($usuario, 'carrerasAsignadas') && $usuario->carrerasAsignadas()->exists()) {
+                $carrerasIds = array_merge($carrerasIds, $usuario->carrerasAsignadas()->pluck('carrera_id')->toArray());
+            }
+
+            $carrerasIds = array_unique(array_filter($carrerasIds));
+
+            // 2. Consultar solicitudes cruzando la carrera por solicitud, por usuario y por grupo
+            $query = \App\Models\Solicitud::with([
+                'usuario.carrera',
+                'usuario.grupoRelacion.carrera',
+                'convocatoria.periodo',
+                'carrera',
+                'grupoRelacion.carrera',
+                'documentos'
+            ]);
+
+            if (!empty($carrerasIds)) {
+                $query->where(function ($q) use ($carrerasIds) {
+                    // Carrera directa en la solicitud
+                    $q->whereIn('carrera_id', $carrerasIds)
+                      // O carrera del alumno que creó la solicitud
+                      ->orWhereHas('usuario', function ($qUser) use ($carrerasIds) {
+                          $qUser->whereIn('carrera_id', $carrerasIds);
+                      })
+                      // O carrera a través del grupo del alumno
+                      ->orWhereHas('usuario.grupoRelacion', function ($qGrupo) use ($carrerasIds) {
+                          $qGrupo->whereIn('carrera_id', $carrerasIds);
+                      });
+                });
+            }
+
+            $solicitudes = $query->orderByDesc('id')->get();
+
+            return response()->json([
+                'data' => $solicitudes,
+                'carreras_detectadas' => $carrerasIds
+            ]);
+
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $th->getMessage()
+            ], 500);
+        }
+    }
 
     // VER EXPEDIENTE
     public function show(Request $request, Solicitud $solicitud) {
@@ -101,53 +101,53 @@ class SolicitudBecaController extends Controller
 
     // ACTUALIZAR ESTADO
     public function actualizarEstado(Request $request, $id)
-{
-    $request->validate([
-        'estado' => 'required|string'
-    ]);
+    {
+        $request->validate([
+            'estado' => 'required|string'
+        ]);
 
-    $solicitud = Solicitud::findOrFail($id);
-    $solicitud->estado = $request->estado;
-    $solicitud->save();
+        $solicitud = Solicitud::findOrFail($id);
+        $solicitud->estado = $request->estado;
+        $solicitud->save();
 
-    return response()->json([
-        'message' => 'Estado actualizado correctamente',
-        'solicitud' => $solicitud
-    ]);
-}
+        return response()->json([
+            'message' => 'Estado actualizado correctamente',
+            'solicitud' => $solicitud
+        ]);
+    }
 
     // DICTAMINAR
     public function dictaminar(Request $request, Solicitud $solicitud) 
-{
-    if (!$this->puedeRevisar($request, $solicitud)) {
-        return response()->json(['message' => 'No tienes permiso para dictaminar esta solicitud.'], 403);
+    {
+        if (!$this->puedeRevisar($request, $solicitud)) {
+            return response()->json(['message' => 'No tienes permiso para dictaminar esta solicitud.'], 403);
+        }
+
+        $validated = $request->validate([
+            'estado' => 'required|string|in:ACEPTADA,RECHAZADA,INCOMPLETA,DOCUMENTACION_INCOMPLETA,EN_REVISION',
+            'porcentaje_beca' => 'nullable|numeric|between:0,100',
+            'comentario_revision' => 'nullable|string|max:2000',
+        ]);
+
+        if ($validated['estado'] === 'ACEPTADA' && empty($validated['porcentaje_beca'])) {
+            return response()->json(['message' => 'Debes indicar el porcentaje de beca autorizado.'], 422);
+        }
+
+        $solicitud->update([
+            'estado' => $validated['estado'],
+            'porcentaje_beca' => $validated['estado'] === 'ACEPTADA' ? $validated['porcentaje_beca'] : null,
+            'comentario_revision' => $validated['comentario_revision'] ?? null,
+            'revisado_por' => $request->user()->id,
+            'fecha_revision' => now(),
+        ]);
+
+        $solicitud->load(['usuario', 'convocatoria', 'carrera', 'grupoRelacion', 'documentos']);
+
+        return response()->json([
+            'message' => 'Estatus de la solicitud actualizado correctamente.',
+            'data' => $solicitud,
+        ]);
     }
-
-    $validated = $request->validate([
-        'estado' => 'required|string|in:ACEPTADA,RECHAZADA,INCOMPLETA,DOCUMENTACION_INCOMPLETA,EN_REVISION',
-        'porcentaje_beca' => 'nullable|numeric|between:0,100',
-        'comentario_revision' => 'nullable|string|max:2000',
-    ]);
-
-    if ($validated['estado'] === 'ACEPTADA' && empty($validated['porcentaje_beca'])) {
-        return response()->json(['message' => 'Debes indicar el porcentaje de beca autorizado.'], 422);
-    }
-
-    $solicitud->update([
-        'estado' => $validated['estado'],
-        'porcentaje_beca' => $validated['estado'] === 'ACEPTADA' ? $validated['porcentaje_beca'] : null,
-        'comentario_revision' => $validated['comentario_revision'] ?? null,
-        'revisado_por' => $request->user()->id,
-        'fecha_revision' => now(),
-    ]);
-
-    $solicitud->load(['usuario', 'convocatoria', 'carrera', 'grupoRelacion', 'documentos']);
-
-    return response()->json([
-        'message' => 'Estatus de la solicitud actualizado correctamente.',
-        'data' => $solicitud,
-    ]);
-}
 
     // VERIFICAR PERMISO PRIVADO
     private function puedeRevisar(Request $request, Solicitud $solicitud): bool {
@@ -180,6 +180,15 @@ class SolicitudBecaController extends Controller
 
         if (!$solicitud) return response()->json(['message' => 'No hay solicitud activa'], 404);
         
+        // EL ESCUDO: Ocultar dictamen si no se han publicado resultados
+        if ($solicitud->convocatoria && !$solicitud->convocatoria->resultados_publicados) {
+            if (in_array($solicitud->estado, ['ACEPTADA', 'RECHAZADA'])) {
+                $solicitud->estado = 'EN_REVISION';
+                $solicitud->porcentaje_beca = null;
+                $solicitud->comentario_revision = null;
+            }
+        }
+        
         return response()->json($solicitud, 200);
     }
 
@@ -188,6 +197,18 @@ class SolicitudBecaController extends Controller
         $solicitudes = Solicitud::with(['convocatoria'])
             ->where('user_id', $request->user()->id)
             ->orderByDesc('created_at')->get();
+
+        // EL ESCUDO para todas las solicitudes del historial
+        $solicitudes->transform(function ($solicitud) {
+            if ($solicitud->convocatoria && !$solicitud->convocatoria->resultados_publicados) {
+                if (in_array($solicitud->estado, ['ACEPTADA', 'RECHAZADA'])) {
+                    $solicitud->estado = 'EN_REVISION';
+                    $solicitud->porcentaje_beca = null;
+                    $solicitud->comentario_revision = null;
+                }
+            }
+            return $solicitud;
+        });
 
         return response()->json($solicitudes, 200);
     }
