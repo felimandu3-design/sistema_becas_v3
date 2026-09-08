@@ -5,10 +5,14 @@ const props = defineProps({
     usuario: {
         type: Object,
         default: () => ({})
+    },
+    tabActual: {
+        type: String,
+        default: 'resumen'
     }
 })
 
-const emit = defineEmits(['scroll-solicitudes', 'cerrar-sesion'])
+const emit = defineEmits(['cambiar-tab', 'scroll-solicitudes', 'cerrar-sesion'])
 
 /*
 |--------------------------------------------------------------------------
@@ -52,17 +56,21 @@ const iniciales = computed(() => {
                 </div>
             </div>
 
-            <!-- NAVEGACIÓN -->
+            <!-- NAVEGACIÓN (PESTAÑAS DEL DASHBOARD) -->
             <nav class="nav">
-                <button type="button" class="nav-item active">
+                <button 
+                    type="button" 
+                    :class="['nav-item', { active: tabActual === 'resumen' }]"
+                    @click="emit('cambiar-tab', 'resumen')"
+                >
                     Resumen
                 </button>
                 <button 
                     type="button" 
-                    class="nav-item" 
-                    @click="emit('scroll-solicitudes')"
+                    :class="['nav-item', { active: tabActual === 'revisadas' }]"
+                    @click="emit('cambiar-tab', 'revisadas')"
                 >
-                    Solicitudes
+                    Solicitudes Revisadas
                 </button>
             </nav>
 
@@ -162,6 +170,7 @@ const iniciales = computed(() => {
     font-size: 11px;
     font-weight: 700;
     cursor: pointer;
+    transition: all 0.2s ease;
 }
 
 .nav-item:hover,

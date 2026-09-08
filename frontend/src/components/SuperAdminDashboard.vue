@@ -401,7 +401,7 @@ async function descargarExcel(convocatoriaId) {
     </template>
   </main>
 
-  <!-- MODALES GLOBALES ... (se mantienen igual) -->
+  <!-- MODALES GLOBALES) -->
   <div v-if="modal === 'solicitud'" class="overlay" @click.self="modal = null">
     <div class="modal">
       <button class="close" @click="modal = null">×</button>
@@ -453,7 +453,6 @@ async function descargarExcel(convocatoriaId) {
 </template>
 
 <style>
-/* (Se mantienen los mismos estilos CSS que ya tenías) */
 *{box-sizing:border-box}
 .dashboard{min-height:100vh;background:#f4f7f5;color:#27312b;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px}
 .topbar{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.98);border-bottom:1px solid #dfe6e1;box-shadow:0 3px 12px rgba(20,50,35,.04)}

@@ -101,6 +101,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/solicitudes', [SolicitudBecaController::class, 'porCarreraAsignada']);
         Route::patch('/solicitudes/{solicitud}/estatus', [SolicitudBecaController::class, 'actualizarEstado']);
         Route::patch('/solicitudes/{solicitud}/dictamen', [SolicitudBecaController::class, 'dictaminar']);
+        Route::post('/tutor/solicitudes/{id}/confirmar', [SolicitudBecaController::class, 'confirmarSolicitud']);
         Route::patch('/documentos/{documento}/observar', [DocumentoController::class, 'solicitarCorreccion']);
     });
 

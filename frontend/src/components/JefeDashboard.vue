@@ -2,7 +2,6 @@
 import { ref, computed, onMounted } from 'vue'
 import api from '../api/axios'
 
-// Importamos a los 4 hijos
 import JefeHeader from './Jefe/JefeHeader.vue'
 import JefeEstadisticas from './Jefe/JefeEstadisticas.vue'
 import JefeTabla from './Jefe/JefeTabla.vue'
@@ -24,9 +23,10 @@ const emit = defineEmits(['cerrar-sesion'])
 
 /*
 |--------------------------------------------------------------------------
-| ESTADO GLOBAL DEL PADRE
+| ESTADO GLOBAL
 |--------------------------------------------------------------------------
 */
+const tabActual = ref('resumen') // 'resumen' | 'revisadas'
 const grupos = ref([])
 const grupoSeleccionado = ref(null)
 
@@ -42,44 +42,57 @@ const mensajeExito = ref('')
 
 /*
 |--------------------------------------------------------------------------
-| DATOS COMPUTADOS
+| HELPERS DE FILTRADO Y ESTADO
 |--------------------------------------------------------------------------
 */
+const esEstadoRevisado = (estado) => {
+    const e = String(estado || '').trim().toUpperCase()
+    return ['ACEPTADA', 'RECHAZADA', 'CONFIRMADO', 'REVISADO_TUTOR'].includes(e)
+}
+
+const esEstadoPendiente = (estado) => {
+    const e = String(estado || '').trim().toUpperCase()
+    return ['PENDIENTE', 'EN_REVISION', 'DOCUMENTACION_INCOMPLETA'].includes(e)
+}
+
 /*
 |--------------------------------------------------------------------------
-| DATOS COMPUTADOS
+| COMPUTADOS
 |--------------------------------------------------------------------------
 */
 const carreraJefe = computed(() => {
     const u = props.usuario?.user || props.usuario
-
     if (u?.carrera?.nombre) return u.carrera.nombre
     if (u?.carrera_nombre) return u.carrera_nombre
-
     if (Array.isArray(u?.carreras_asignadas) && u.carreras_asignadas.length > 0) {
         return u.carreras_asignadas[0].nombre
     }
-
     if (Array.isArray(grupos.value) && grupos.value.length > 0) {
         if (grupos.value[0].carrera?.nombre) return grupos.value[0].carrera.nombre
     }
-
     return 'Carrera asignada'
 })
 
-// 1. Declarar PRIMERO la propiedad de solicitudes filtradas
-const solicitudesFiltradas = computed(() => {
+// 1. Solicitudes según la pestaña actual
+const solicitudesPorTab = computed(() => {
     const lista = Array.isArray(solicitudes.value) ? solicitudes.value : []
-    
-    if (!grupoSeleccionado.value) return lista
-
     return lista.filter(s => {
-        const idGrupoSol = Number(s.grupo_id || s.usuario?.grupo_id || s.grupo_relacion?.id || 0)
+        const est = s.estado || s.estatus
+        return tabActual.value === 'revisadas' ? esEstadoRevisado(est) : esEstadoPendiente(est)
+    })
+})
+
+// 2. Solicitudes del grupo seleccionado
+const solicitudesFiltradas = computed(() => {
+    if (!grupoSeleccionado.value) return solicitudesPorTab.value
+
+    return solicitudesPorTab.value.filter(s => {
+        const idGrupoSol = Number(s.grupo_id || s.usuario?.grupo_id || s.grupo_relacion?.id || s.alumno?.grupo_id || 0)
         return idGrupoSol === Number(grupoSeleccionado.value.id)
     })
 })
 
-// 2. Declarar DESPUÉS las estadísticas para que puedan usar solicitudesFiltradas.value
+// 3. Métricas
 const estadisticas = computed(() => {
     const fuente = grupoSeleccionado.value ? solicitudesFiltradas.value : (Array.isArray(solicitudes.value) ? solicitudes.value : [])
     const estados = fuente.map(s => String(s.estado || s.estatus || 'PENDIENTE').trim().toUpperCase())
@@ -95,21 +108,21 @@ const estadisticas = computed(() => {
 })
 
 const porcentajeAtendidas = computed(() => {
-    if (estadisticas.value.total === 0) return 0
-    const atendidas = estadisticas.value.aceptadas + estadisticas.value.rechazadas
-    return Math.round((atendidas / estadisticas.value.total) * 100)
+    const totalGeneral = solicitudes.value.length
+    if (totalGeneral === 0) return 0
+    const atendidas = solicitudes.value.filter(s => esEstadoRevisado(s.estado || s.estatus)).length
+    return Math.round((atendidas / totalGeneral) * 100)
 })
 
 /*
 |--------------------------------------------------------------------------
-| LLAMADAS A LA API
+| CONSULTAS Y METODOS
 |--------------------------------------------------------------------------
 */
 async function cargarDatosIniciales() {
     cargando.value = true
     error.value = ''
     try {
-        // Cargar solicitudes y grupos en paralelo
         const [resSolicitudes, resGrupos] = await Promise.allSettled([
             api.get('/admin/solicitudes'),
             api.get('/admin/grupos')
@@ -125,11 +138,32 @@ async function cargarDatosIniciales() {
             grupos.value = dataG?.data || (Array.isArray(dataG) ? dataG : [])
         }
     } catch (err) {
-        console.error('Error al obtener datos del Jefe de Carrera:', err)
+        console.error('Error al obtener datos:', err)
         error.value = 'No fue posible cargar la información completa.'
     } finally {
         cargando.value = false
     }
+}
+
+function contarSolicitudesPorGrupo(grupoId) {
+    return solicitudesPorTab.value.filter(s => {
+        const idGrupoSol = Number(s.grupo_id || s.usuario?.grupo_id || s.grupo_relacion?.id || s.alumno?.grupo_id || 0)
+        return idGrupoSol === Number(grupoId)
+    }).length
+}
+
+function cambiarTab(nuevoTab) {
+    tabActual.value = nuevoTab
+    // Mantener o resetear el grupo según el flujo deseado
+}
+
+function seleccionarGrupoPorId(grupoId) {
+    if (!grupoId) {
+        grupoSeleccionado.value = null
+        return
+    }
+    const encontrado = grupos.value.find(g => Number(g.id) === Number(grupoId))
+    grupoSeleccionado.value = encontrado || null
 }
 
 async function guardarDictamen(payload) {
@@ -153,11 +187,9 @@ async function guardarDictamen(payload) {
 
         mensajeExito.value = data?.message || 'Solicitud actualizada correctamente.'
         solicitudSeleccionada.value = null
-
         setTimeout(() => { mensajeExito.value = '' }, 3500)
     } catch (err) {
-        console.error('Error guardando dictamen:', err)
-        alert(err?.response?.data?.message || 'No fue posible guardar el dictamen.')
+        alert(err?.response?.data?.message || 'Error al guardar el dictamen.')
     } finally {
         guardandoDictamen.value = false
     }
@@ -172,26 +204,6 @@ async function marcarEnRevision() {
     } catch (err) {
         alert(err?.response?.data?.message || 'No fue posible cambiar el estado.')
     }
-}
-
-/*
-|--------------------------------------------------------------------------
-| NAVEGACIÓN Y ACCIONES
-|--------------------------------------------------------------------------
-*/
-function contarSolicitudesPorGrupo(grupoId) {
-    return solicitudes.value.filter(s => {
-        const idGrupoSol = s.grupo_id || s.usuario?.grupo_id || s.alumno?.grupo_id
-        return idGrupoSol === grupoId
-    }).length
-}
-
-function seleccionarGrupo(grupo) {
-    grupoSeleccionado.value = grupo
-}
-
-function volverAGrupos() {
-    grupoSeleccionado.value = null
 }
 
 function scrollASolicitudes() {
@@ -212,38 +224,72 @@ onMounted(() => {
 <template>
     <div class="jefe-dashboard">
 
-        <!-- 1. HEADER (Hijo 1) -->
+        <!-- HEADER -->
         <JefeHeader 
             :usuario="usuario" 
+            :tab-actual="tabActual"
+            @cambiar-tab="cambiarTab"
             @scroll-solicitudes="scrollASolicitudes"
             @cerrar-sesion="confirmarCerrarSesion"
         />
 
         <main class="main-content">
             
-            <!-- ALERTA DE ÉXITO -->
             <div v-if="mensajeExito" class="success-alert">
                 <div class="check-mini">✓</div>
                 {{ mensajeExito }}
             </div>
 
-            <!-- 2. ESTADÍSTICAS (Hijo 2) -->
+            <!-- ESTADÍSTICAS -->
             <JefeEstadisticas 
                 :carrera-jefe="carreraJefe"
                 :estadisticas="estadisticas"
                 :porcentaje-atendidas="porcentajeAtendidas"
             />
 
-            <!-- VISTA DE TARJETAS DE GRUPOS (Se oculta al seleccionar un grupo) -->
-            <section v-if="!grupoSeleccionado" class="grupos-section">
-                <div class="section-title">
-                    <h3>Grupos de la Carrera</h3>
-                    <p>Selecciona un grupo para revisar las solicitudes de beca de sus alumnos</p>
+            <!-- CONTROL BAR: SELECTOR DE GRUPOS NATIVO -->
+            <section class="group-selector-bar">
+                <div class="selector-info">
+                    <label for="select-grupo">Filtrar por grupo:</label>
+                    <div class="select-wrapper">
+                        <select 
+                            id="select-grupo"
+                            :value="grupoSeleccionado?.id || ''"
+                            @change="e => seleccionarGrupoPorId(e.target.value)"
+                        >
+                            <option value="">-- Todos los grupos --</option>
+                            <option v-for="grupo in grupos" :key="grupo.id" :value="grupo.id">
+                                {{ grupo.nombre || grupo.clave }} ({{ contarSolicitudesPorGrupo(grupo.id) }} solicitudes)
+                            </option>
+                        </select>
+                    </div>
                 </div>
 
-                <div v-if="cargando" class="loading-state">
-                    Cargando grupos...
+                <button 
+                    v-if="grupoSeleccionado" 
+                    type="button" 
+                    class="btn-reset-grupo"
+                    @click="grupoSeleccionado = null"
+                >
+                    ✕ Ver todos los grupos
+                </button>
+            </section>
+
+            <!-- VISTA 1: GRILLA DE GRUPOS (Si no hay un grupo seleccionado) -->
+            <section v-if="!grupoSeleccionado" class="grupos-section">
+                <div class="section-title">
+                    <h3>
+                        {{ tabActual === 'resumen' ? 'Grupos con Solicitudes Pendientes' : 'Grupos con Solicitudes Revisadas' }}
+                    </h3>
+                    <p>
+                        {{ tabActual === 'resumen' 
+                            ? 'Selecciona un grupo para evaluar sus solicitudes' 
+                            : 'Selecciona un grupo para consultar su historial de dictámenes' 
+                        }}
+                    </p>
                 </div>
+
+                <div v-if="cargando" class="loading-state">Cargando grupos...</div>
 
                 <div v-else-if="grupos.length" class="grupos-grid">
                     <div v-for="grupo in grupos" :key="grupo.id" class="grupo-card">
@@ -254,40 +300,42 @@ onMounted(() => {
 
                         <div class="card-body">
                             <h4 class="grupo-name">{{ grupo.nombre || grupo.clave }}</h4>
-                            <p class="grupo-sub">{{ grupo.carrera?.nombre || grupo.carrera?.clave || 'Carrera asignada' }}</p>
+                            <p class="grupo-sub">{{ grupo.carrera?.nombre || 'Carrera asignada' }}</p>
 
                             <div class="info-box">
                                 <p>Cuatrimestre: <strong>{{ grupo.cuatrimestre || 1 }}°</strong></p>
-                                <p>Profesor Tutor: <strong>{{ grupo.tutor?.name || grupo.profesor || 'Sin asignar' }}</strong></p>
-                                <p>Solicitudes registradas: <strong class="text-solicitudes">{{ contarSolicitudesPorGrupo(grupo.id) }}</strong></p>
+                                <p>Tutor: <strong>{{ grupo.tutor?.name || grupo.profesor || 'Sin asignar' }}</strong></p>
+                                <p>
+                                    {{ tabActual === 'resumen' ? 'Pendientes:' : 'Revisadas:' }} 
+                                    <strong class="text-solicitudes">{{ contarSolicitudesPorGrupo(grupo.id) }}</strong>
+                                </p>
                             </div>
                         </div>
 
                         <div class="card-actions">
                             <button 
                                 type="button" 
-                                class="btn-card-primary" 
-                                @click="seleccionarGrupo(grupo)"
+                                :class="['btn-card-primary', { 'btn-card-revisadas': tabActual === 'revisadas' }]" 
+                                @click="grupoSeleccionado = grupo"
                             >
-                                📋 Ver solicitudes del grupo
+                                {{ tabActual === 'resumen' ? '📋 Ver solicitudes del grupo' : '👁️ Ver solicitudes revisadas' }}
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <div v-else class="empty-state">
-                    No hay grupos registrados en esta carrera.
-                </div>
+                <div v-else class="empty-state">No hay grupos asignados.</div>
             </section>
 
-            <!-- 3. TABLA Y FILTROS (ÚNICA INSTANCIA - SE MUESTRA AL SELECCIONAR UN GRUPO) -->
-            <div v-if="grupoSeleccionado" id="solicitudes" class="solicitudes-container">
+            <!-- VISTA 2: TABLA DE SOLICITUDES DEL GRUPO SELECCIONADO -->
+            <div v-else id="solicitudes" class="solicitudes-container">
                 <JefeTabla 
-                    :solicitudes="solicitudesFiltradas || solicitudes"
+                    :solicitudes="solicitudesFiltradas"
                     :grupo-seleccionado="grupoSeleccionado" 
+                    :modo-revisadas="tabActual === 'revisadas'"
                     :cargando="cargando"
                     :error="error"
-                    @recargar="cargarDatosIniciales || cargarSolicitudes"
+                    @recargar="cargarDatosIniciales"
                     @revisar="(sol) => solicitudSeleccionada = sol"
                     @volver="grupoSeleccionado = null"
                 />
@@ -295,11 +343,12 @@ onMounted(() => {
 
         </main>
 
-        <!-- 4. MODAL DE REVISIÓN Y PDF (Hijo 4) -->
+        <!-- MODAL DICTAMEN -->
         <JefeModalDictamen 
             v-if="solicitudSeleccionada"
             :solicitud="solicitudSeleccionada"
             :guardando="guardandoDictamen"
+            :solo-lectura="tabActual === 'revisadas'"
             @cerrar="solicitudSeleccionada = null"
             @guardar-dictamen="guardarDictamen"
             @marcar-revision="marcarEnRevision"
@@ -328,9 +377,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-* { 
-    box-sizing: border-box; 
-}
+* { box-sizing: border-box; }
 
 .jefe-dashboard {
     min-height: 100vh;
@@ -342,12 +389,81 @@ onMounted(() => {
 .main-content {
     width: min(1220px, calc(100% - 40px));
     margin: auto;
-    padding: 30px 0 80px;
+    padding: 24px 0 80px;
 }
 
-/* ================================================================
-   ALERTA DE ÉXITO
-================================================================ */
+/* BARRA DE SELECTOR DE GRUPO */
+.group-selector-bar {
+    margin: 20px 0 24px;
+    padding: 14px 20px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.selector-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+}
+
+.selector-info label {
+    font-size: 13px;
+    font-weight: 700;
+    color: #334155;
+    white-space: nowrap;
+}
+
+.select-wrapper {
+    position: relative;
+    max-width: 320px;
+    width: 100%;
+}
+
+.select-wrapper select {
+    width: 100%;
+    padding: 9px 14px;
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+    background-color: #f8fafc;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.select-wrapper select:focus {
+    border-color: #247548;
+    background-color: #fff;
+    box-shadow: 0 0 0 3px rgba(36, 117, 72, 0.12);
+}
+
+.btn-reset-grupo {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-reset-grupo:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+/* ALERTA Y TARJETAS */
 .success-alert {
     margin-bottom: 18px;
     padding: 13px 16px;
@@ -373,25 +489,9 @@ onMounted(() => {
     font-size: 11px;
 }
 
-/* ================================================================
-   SECCIÓN DE GRUPOS Y TARJETAS
-================================================================ */
-.grupos-section {
-    margin: 28px 0;
-}
-
-.section-title h3 { 
-    margin: 0; 
-    font-size: 16px; 
-    font-weight: 800; 
-    color: #1e293b; 
-}
-
-.section-title p { 
-    margin: 4px 0 16px; 
-    font-size: 12px; 
-    color: #64748b; 
-}
+.grupos-section { margin: 28px 0; }
+.section-title h3 { margin: 0; font-size: 16px; font-weight: 800; color: #1e293b; }
+.section-title p { margin: 4px 0 16px; font-size: 12px; color: #64748b; }
 
 .grupos-grid {
     display: grid;
@@ -416,67 +516,19 @@ onMounted(() => {
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.04);
 }
 
-.card-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
+.card-top { display: flex; justify-content: space-between; align-items: center; }
+.status-badge { background: #e6f4ea; color: #137333; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.turno-badge { color: #94a3b8; font-size: 11px; font-weight: 800; letter-spacing: 0.05em; }
 
-.status-badge {
-    background: #e6f4ea;
-    color: #137333;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 700;
-}
+.grupo-name { margin: 12px 0 2px; font-size: 22px; font-weight: 800; color: #0f172a; }
+.grupo-sub { margin: 0 0 12px; font-size: 13px; color: #64748b; font-weight: 600; }
 
-.turno-badge {
-    color: #94a3b8;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.05em;
-}
+.info-box { background: #f8fafc; padding: 12px 14px; border-radius: 12px; font-size: 12px; color: #475569; }
+.info-box p { margin: 4px 0; }
+.info-box strong { color: #1e293b; }
+.text-solicitudes { color: #247548; font-weight: 800; }
 
-.grupo-name {
-    margin: 12px 0 2px;
-    font-size: 22px;
-    font-weight: 800;
-    color: #0f172a;
-}
-
-.grupo-sub {
-    margin: 0 0 12px;
-    font-size: 13px;
-    color: #64748b;
-    font-weight: 600;
-}
-
-.info-box {
-    background: #f8fafc;
-    padding: 12px 14px;
-    border-radius: 12px;
-    font-size: 12px;
-    color: #475569;
-}
-
-.info-box p { 
-    margin: 4px 0; 
-}
-
-.info-box strong { 
-    color: #1e293b; 
-}
-
-.text-solicitudes {
-    color: #247548;
-    font-weight: 800;
-}
-
-.card-actions {
-    display: flex;
-    margin-top: 16px;
-}
+.card-actions { display: flex; margin-top: 16px; }
 
 .btn-card-primary {
     width: 100%;
@@ -497,8 +549,19 @@ onMounted(() => {
     box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
 }
 
-.loading-state, 
-.empty-state {
+.btn-card-revisadas {
+    border-color: #3b82f6;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.btn-card-revisadas:hover {
+    background: #2563eb;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+}
+
+.loading-state, .empty-state {
     text-align: center;
     padding: 30px;
     background: #fff;
@@ -508,16 +571,9 @@ onMounted(() => {
     font-size: 13px;
 }
 
-/* ================================================================
-   CONTENEDOR DE LA TABLA
-================================================================ */
-.solicitudes-container {
-    margin-top: 24px;
-}
+.solicitudes-container { margin-top: 10px; }
 
-/* ================================================================
-   MODAL LOGOUT
-================================================================ */
+/* MODAL LOGOUT */
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -536,42 +592,13 @@ onMounted(() => {
     box-shadow: 0 30px 85px rgba(18, 27, 22, .23);
 }
 
-.logout-modal {
-    width: min(405px, 100%);
-    text-align: center;
-    padding: 29px;
-}
+.logout-modal { width: min(405px, 100%); text-align: center; padding: 29px; }
+.logout-modal-icon { width: 50px; height: 50px; margin: 0 auto 13px; display: grid; place-items: center; border-radius: 14px; color: #84253d; background: #faedf1; }
+.logout-modal h2 { margin: 0 0 6px; font-size: 18px; }
+.logout-modal p { margin: 0; color: #8a918d; font-size: 10px; }
+.logout-actions { margin-top: 22px; display: flex; gap: 9px; }
 
-.logout-modal-icon {
-    width: 50px;
-    height: 50px;
-    margin: 0 auto 13px;
-    display: grid;
-    place-items: center;
-    border-radius: 14px;
-    color: #84253d;
-    background: #faedf1;
-}
-
-.logout-modal h2 { 
-    margin: 0 0 6px; 
-    font-size: 18px; 
-}
-
-.logout-modal p { 
-    margin: 0; 
-    color: #8a918d; 
-    font-size: 10px; 
-}
-
-.logout-actions {
-    margin-top: 22px;
-    display: flex;
-    gap: 9px;
-}
-
-.primary-button, 
-.secondary-button {
+.primary-button, .secondary-button {
     min-height: 40px;
     padding: 0 15px;
     border-radius: 10px;
@@ -580,32 +607,21 @@ onMounted(() => {
     cursor: pointer;
 }
 
-.primary-button { 
-    border: 0; 
-    background: #247548; 
-    color: #fff; 
-}
+.primary-button { border: 0; background: #247548; color: #fff; }
+.secondary-button { flex: 1; border: 1px solid #e0e4e1; background: #fff; color: #666e69; }
+.logout-confirm { flex: 1; background: #7a1c33; }
 
-.secondary-button { 
-    flex: 1; 
-    border: 1px solid #e0e4e1; 
-    background: #fff; 
-    color: #666e69; 
-}
-
-.logout-confirm { 
-    flex: 1; 
-    background: #7a1c33; 
-}
-
-/* RESPONSIVE */
-@media (max-width: 520px) {
-    .main-content { 
-        width: calc(100% - 24px); 
-        padding-top: 20px; 
+@media (max-width: 640px) {
+    .group-selector-bar {
+        flex-direction: column;
+        align-items: stretch;
     }
-    .grupos-grid { 
-        grid-template-columns: 1fr; 
+    .selector-info {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .select-wrapper {
+        max-width: 100%;
     }
 }
 </style>

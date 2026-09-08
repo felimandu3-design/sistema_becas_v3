@@ -1,688 +1,596 @@
 <script setup>
 import { ref, computed } from 'vue'
 
+/* =========================================================================
+   PROPS Y EMITS (ALINEADOS CON VISTA TUTOR)
+   ========================================================================= */
 const props = defineProps({
-    solicitudes: { type: Array, default: () => [] },
-    grupoSeleccionado: { type: Object, default: null },
-    cargando: { type: Boolean, default: false },
-    error: { type: String, default: null }
-});
+  solicitudes: { 
+    type: Array, 
+    default: () => [] 
+  },
+  grupoSeleccionado: { 
+    type: Object, 
+    default: null 
+  },
+  cargando: { 
+    type: Boolean, 
+    default: false 
+  },
+  error: { 
+    type: String, 
+    default: '' 
+  },
+  tabActual: { 
+    type: String, 
+    default: 'resumen' 
+  }
+})
 
-const emit = defineEmits(['recargar', 'revisar', 'volver']);
+const emit = defineEmits(['recargar', 'revisar', 'volver', 'seleccionar', 'confirmar'])
 
-// Variables locales para filtros
-const filtroEstatus = ref('TODOS')
-const terminoBusqueda = ref('')
+/* =========================================================================
+   ESTADOS DE BÚSQUEDA Y FILTRADO LOCAL
+   ========================================================================= */
+const busqueda = ref('')
+const estadoFiltro = ref('TODOS')
 
-/*
-|--------------------------------------------------------------------------
-| FUNCIONES DE UTILIDAD (Formato y Clases)
-|--------------------------------------------------------------------------
-*/
+const solicitudesFiltradasTabla = computed(() => {
+  let lista = Array.isArray(props.solicitudes) ? props.solicitudes : []
+
+  if (estadoFiltro.value !== 'TODOS') {
+    lista = lista.filter(s => {
+      const est = String(s.estado || s.estatus || '').trim().toUpperCase()
+      return est === estadoFiltro.value
+    })
+  }
+
+  if (busqueda.value.trim() !== '') {
+    const q = busqueda.value.toLowerCase()
+    lista = lista.filter(s => {
+      const alumno = obtenerAlumno(s)
+      const folio = obtenerFolio(s).toLowerCase()
+      return alumno.nombre.toLowerCase().includes(q) || 
+             alumno.matricula.toLowerCase().includes(q) || 
+             folio.includes(q)
+    })
+  }
+
+  return lista
+})
+
+/* =========================================================================
+   HELPER FUNCTIONS (ESTILO TUTOR)
+   ========================================================================= */
+function obtenerAlumno(solicitud) {
+  return {
+    nombre: solicitud.usuario?.name || 
+            solicitud.usuario?.nombre || 
+            solicitud.alumno?.nombre || 
+            solicitud.alumno?.name || 
+            'Alumno',
+    matricula: solicitud.usuario?.matricula || 
+               solicitud.alumno?.matricula || 
+               solicitud.matricula || 
+               '—'
+  }
+}
+
+function obtenerFolio(solicitud) {
+  if (!solicitud) return 'Sin folio'
+  return solicitud.folio || solicitud.id_solicitud || `#${solicitud.id}`
+}
+
+function obtenerGrupo(solicitud) {
+  return solicitud.grupo_relacion?.nombre || 
+         solicitud.grupo?.nombre || 
+         solicitud.usuario?.grupo?.nombre || 
+         solicitud.usuario?.grupo || 
+         '—'
+}
+
+// Búsqueda exhaustiva del periodo para evitar el guion "—"
+function obtenerPeriodo(solicitud) {
+  return solicitud.convocatoria?.periodo?.nombre || 
+         solicitud.convocatoria?.periodo || 
+         solicitud.periodo || 
+         '—'
+}
+
+
+function obtenerDocumentos(solicitud) {
+  const docs = solicitud.documentos || solicitud.archivos || []
+  return Array.isArray(docs) ? docs : []
+}
+
+function obtenerDescuento(solicitud) {
+  const estatus = (solicitud.estado || solicitud.estatus || '').toUpperCase()
+  const valor = solicitud.porcentaje_beca ?? solicitud.porcentaje_descuento ?? solicitud.descuento ?? null
+
+  if (valor === null || valor === undefined || valor === '' || valor === 'N/A') {
+    return estatus === 'ACEPTADA' ? '50%' : 'N/A'
+  }
+
+  const strValor = valor.toString().trim()
+  return strValor.includes('%') ? strValor : `${strValor}%`
+}
+
 function normalizarEstado(estado) {
-    return String(estado || 'PENDIENTE').trim().toUpperCase()
+  return String(estado || 'PENDIENTE').trim().toUpperCase()
 }
 
 function textoEstado(estado) {
-    const valor = normalizarEstado(estado)
-    const estados = {
-        PENDIENTE: 'Pendiente',
-        EN_REVISION: 'En revisión',
-        ACEPTADA: 'Aceptada',
-        RECHAZADA: 'Rechazada',
-        DOCUMENTACION_INCOMPLETA: 'Documentación incompleta',
-    }
-    return estados[valor] || valor
+  const valor = normalizarEstado(estado)
+  const estados = {
+    PENDIENTE: 'Pendiente',
+    EN_REVISION: 'En revisión',
+    ACEPTADA: 'Aceptada',
+    RECHAZADA: 'Rechazada',
+    DOCUMENTACION_INCOMPLETA: 'Documentación incompleta',
+    REVISADO_TUTOR: 'Revisado por Tutor',
+    CONFIRMADO: 'Confirmado',
+  }
+  return estados[valor] || valor
 }
 
 function claseEstado(estado) {
-    const valor = normalizarEstado(estado)
-    const clases = {
-        PENDIENTE: 'warning',
-        EN_REVISION: 'info',
-        ACEPTADA: 'success',
-        RECHAZADA: 'danger',
-        DOCUMENTACION_INCOMPLETA: 'purple',
-    }
-    return clases[valor] || 'neutral'
+  const valor = normalizarEstado(estado)
+  const clases = {
+    PENDIENTE: 'warning',
+    EN_REVISION: 'info',
+    ACEPTADA: 'success',
+    RECHAZADA: 'danger',
+    DOCUMENTACION_INCOMPLETA: 'purple',
+    REVISADO_TUTOR: 'success',
+    CONFIRMADO: 'success',
+  }
+  return clases[valor] || 'neutral'
 }
 
-function alumnoDe(solicitud) {
-    return solicitud?.usuario || solicitud?.user || solicitud?.alumno || {}
+function esEstadoRevisado(estado) {
+  const e = normalizarEstado(estado)
+  return ['ACEPTADA', 'RECHAZADA', 'CONFIRMADO', 'REVISADO_TUTOR'].includes(e)
 }
 
-function grupoDe(solicitud) {
-    const g = solicitud?.grupo_relacion || 
-              solicitud?.grupoRelacion || 
-              solicitud?.grupo || 
-              alumnoDe(solicitud)?.grupo
-
-    if (typeof g === 'object' && g !== null) {
-        return g.clave || g.nombre || '—'
-    }
-    
-    return g || '—'
+function manejarVerDetalle(solicitud) {
+  emit('seleccionar', solicitud)
+  emit('revisar', solicitud)
 }
-
-function periodoDe(solicitud) {
-    return solicitud?.convocatoria?.periodo?.nombre || solicitud?.convocatoria?.periodo || 'Sin periodo'
-}
-
-function folioDe(solicitud) {
-    if (!solicitud) return 'Sin folio'
-    return solicitud.folio || `BEC-${String(solicitud.id).padStart(5, '0')}`
-}
-
-function obtenerDocumentos(solicitud) {
-    const documentos = solicitud?.documentos || []
-    return Array.isArray(documentos) ? documentos : []
-}
-
-/*
-|--------------------------------------------------------------------------
-| LÓGICA DE FILTRADO
-|--------------------------------------------------------------------------
-*/
-const solicitudesFiltradas = computed(() => {
-    const termino = terminoBusqueda.value.trim().toLowerCase()
-
-    return props.solicitudes.filter(solicitud => {
-        // 1. FILTRAR POR GRUPO SELECCIONADO (Si hay uno activo)
-        if (props.grupoSeleccionado) {
-            const targetId = props.grupoSeleccionado.id
-            const targetClave = String(props.grupoSeleccionado.clave || props.grupoSeleccionado.nombre || '').trim().toLowerCase()
-
-            const alumno = alumnoDe(solicitud)
-            
-            // Comprobación por ID
-            const matchId = 
-                solicitud.grupo_id == targetId || 
-                solicitud.grupo?.id == targetId ||
-                alumno.grupo_id == targetId ||
-                alumno.grupo?.id == targetId
-
-            // Comprobación por Clave/Nombre (ej: "7VSC1")
-            const grupoNombreStr = String(grupoDe(solicitud)).trim().toLowerCase()
-            const matchClave = targetClave !== '' && grupoNombreStr === targetClave
-
-            if (!matchId && !matchClave) {
-                return false
-            }
-        }
-
-        // 2. FILTRAR POR ESTATUS
-        const estado = normalizarEstado(solicitud.estado || solicitud.estatus)
-        const coincideEstado = filtroEstatus.value === 'TODOS' || estado === filtroEstatus.value
-
-        // 3. BÚSQUEDA POR TEXTO (Nombre, Matrícula, Folio, etc.)
-        const alumno = alumnoDe(solicitud)
-        const textoBusqueda = [
-            alumno.name,
-            alumno.matricula,
-            grupoDe(solicitud),
-            folioDe(solicitud),
-            solicitud.convocatoria?.nombre,
-            solicitud.convocatoria?.periodo?.nombre,
-        ].filter(Boolean).join(' ').toLowerCase()
-
-        const coincideBusqueda = !termino || textoBusqueda.includes(termino)
-
-        return coincideEstado && coincideBusqueda
-    })
-})
 </script>
 
 <template>
-    <section id="solicitudes" class="requests-card">
-        <!-- ENCABEZADO, INDICADOR DE GRUPO Y BOTONES DE ACCIÓN -->
-        <div class="requests-heading">
-            <div>
-                <!-- Muestra la etiqueta y clave del grupo si existe -->
-                <template v-if="grupoSeleccionado">
-                    <span class="eyebrow-grupo">FILTRANDO POR GRUPO</span>
-                    <h2 class="grupo-nombre">{{ grupoSeleccionado.nombre || grupoSeleccionado.clave }}</h2>
-                </template>
-                <template v-else>
-                    <span class="eyebrow">SOLICITUDES</span>
-                    <h2>Alumnos de mi carrera</h2>
-                </template>
+  <div class="tabla-wrapper">
+    
+    <!-- ENCABEZADO DE SECCIÓN Y CONTROLES DE FILTRADO -->
+    <div class="header-seguimiento">
+      <div class="info-grupo-titulo">
+        <span class="eyebrow">SEGUIMIENTO</span>
+        <h3>Solicitudes del grupo: {{ props.grupoSeleccionado?.nombre || 'Seleccionado' }}</h3>
+        <p>{{ solicitudesFiltradasTabla.length }} resultado(s)</p>
+      </div>
 
-                <p>{{ solicitudesFiltradas.length }} resultado(s)</p>
-            </div>
-            
-            <div class="header-buttons">
+      <div class="acciones-header">
+        <button type="button" class="btn-secundario" @click="emit('recargar')">
+          🔄 Actualizar
+        </button>
+        <button type="button" class="btn-secundario" @click="emit('volver')">
+          ← Volver a Grupos
+        </button>
+      </div>
+    </div>
+
+    <!-- BUSCADOR Y FILTRO POR ESTADO -->
+    <div class="filtros-barra">
+      <input 
+        type="text" 
+        v-model="busqueda" 
+        placeholder="Buscar por nombre, matrícula o folio..." 
+        class="input-busqueda"
+      />
+      
+      <select v-model="estadoFiltro" class="select-estado">
+        <option value="TODOS">Todos los estados</option>
+        <option value="PENDIENTE">Pendiente</option>
+        <option value="EN_REVISION">En revisión</option>
+        <option value="ACEPTADA">Aceptada</option>
+        <option value="RECHAZADA">Rechazada</option>
+        <option value="DOCUMENTACION_INCOMPLETA">Documentación incompleta</option>
+      </select>
+    </div>
+
+    <!-- Estado de Carga -->
+    <div v-if="props.cargando" class="estado-vacio">
+      <div class="spinner"></div>
+      <p>Cargando solicitudes...</p>
+    </div>
+
+    <!-- Error -->
+    <div v-else-if="props.error" class="estado-vacio error-text">
+      <p>{{ props.error }}</p>
+    </div>
+
+    <!-- Sin datos -->
+    <div v-else-if="solicitudesFiltradasTabla.length === 0" class="estado-vacio">
+      <div class="vacio-icon">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+        </svg>
+      </div>
+      <strong>No hay solicitudes registradas</strong>
+      <p>Aún no existen registros o coincidencias en esta sección.</p>
+    </div>
+
+    <!-- Tabla de datos con diseño idéntico al tutor -->
+    <div v-else class="tabla-container">
+      <table class="tabla">
+        <thead>
+          <tr>
+            <th>ALUMNO</th>
+            <th>MATRÍCULA</th>
+            <th>GRUPO</th>
+            <th>PERIODO</th>
+            <th>DOCUMENTOS</th>
+            <th>DESCUENTO</th>
+            <th>ESTADO</th>
+            <th class="text-right">ACCIÓN</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="solicitud in solicitudesFiltradasTabla" :key="solicitud.id">
+            <!-- ALUMNO -->
+            <td>
+              <div class="col-alumno">
+                <div class="avatar-sm">
+                  {{ obtenerAlumno(solicitud).nombre.charAt(0).toUpperCase() }}
+                </div>
+                <div class="info-alumno">
+                  <strong>{{ obtenerAlumno(solicitud).nombre }}</strong>
+                  <small>{{ obtenerFolio(solicitud) }}</small>
+                </div>
+              </div>
+            </td>
+
+            <!-- MATRÍCULA -->
+            <td class="text-muted">
+              {{ obtenerAlumno(solicitud).matricula }}
+            </td>
+
+            <!-- GRUPO -->
+            <td class="text-muted">
+              {{ obtenerGrupo(solicitud) }}
+            </td>
+
+            <!-- PERIODO (Columna activa con helper actualizado) -->
+            <td class="text-muted">
+              {{ obtenerPeriodo(solicitud) }}
+            </td>
+
+            <!-- DOCUMENTOS -->
+            <td>
+              <span class="badge-docs">
+                <strong>{{ obtenerDocumentos(solicitud).length }}</strong>
+                <small>archivo(s)</small>
+              </span>
+            </td>
+
+            <!-- DESCUENTO -->
+            <td class="text-muted">
+              {{ obtenerDescuento(solicitud) }}
+            </td>
+
+            <!-- ESTADO -->
+            <td>
+              <span :class="['badge-estado', claseEstado(solicitud.estado || solicitud.estatus)]">
+                {{ textoEstado(solicitud.estado || solicitud.estatus) }}
+              </span>
+            </td>
+
+            <!-- ACCIONES CONDICIONADAS CON ESTILOS DE TUTOR -->
+            <td class="text-right">
+              <div class="acciones">
                 <button 
-                    type="button" 
-                    class="refresh-button" 
-                    @click="$emit('recargar')"
+                  type="button" 
+                  class="btn-detalle" 
+                  @click="manejarVerDetalle(solicitud)"
                 >
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M20 11a8 8 0 1 0-2 5.3" />
-                        <path d="M20 4v7h-7" />
-                    </svg>
-                    Actualizar
+                  Ver detalle
                 </button>
 
-                <!-- BOTÓN REGRESAR A GRUPOS -->
+                <!-- Botón Confirmar oculto cuando tabActual !== 'resumen' O la solicitud ya fue revisada -->
                 <button 
-                    v-if="grupoSeleccionado"
-                    type="button" 
-                    class="back-button" 
-                    @click="$emit('volver')"
+                  v-if="props.tabActual === 'resumen' && !esEstadoRevisado(solicitud.estado || solicitud.estatus)"
+                  type="button" 
+                  class="btn-confirmar" 
+                  @click="emit('confirmar', solicitud)"
                 >
-                    ← Ver todos los grupos
+                  Confirmar
                 </button>
-            </div>
-        </div>
-
-        <!-- FILTROS -->
-        <div class="filters">
-            <div class="search-field">
-                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="M20 20l-4-4" />
-                </svg>
-                <input 
-                    v-model="terminoBusqueda" 
-                    type="text" 
-                    placeholder="Buscar por alumno, matrícula, folio..." 
-                />
-            </div>
-            <select v-model="filtroEstatus" class="filter-select">
-                <option value="TODOS">Todos los estados</option>
-                <option value="PENDIENTE">Pendiente</option>
-                <option value="EN_REVISION">En revisión</option>
-                <option value="ACEPTADA">Aceptada</option>
-                <option value="RECHAZADA">Rechazada</option>
-                <option value="DOCUMENTACION_INCOMPLETA">Documentación incompleta</option>
-            </select>
-        </div>
-
-        <!-- ESTADO: CARGANDO -->
-        <div v-if="cargando" class="loading-box">
-            <div class="spinner"></div>
-            <strong>Consultando solicitudes</strong>
-            <span>Espera un momento...</span>
-        </div>
-
-        <!-- ESTADO: ERROR -->
-        <div v-else-if="error" class="empty-box">
-            <div class="empty-icon error">!</div>
-            <strong>No se pudieron cargar las solicitudes</strong>
-            <span>{{ error }}</span>
-            <button type="button" class="primary-button" style="margin-top: 15px;" @click="$emit('recargar')">
-                Intentar nuevamente
-            </button>
-        </div>
-
-        <!-- ESTADO: VACÍO (SIN RESULTADOS) -->
-        <div v-else-if="solicitudesFiltradas.length === 0" class="empty-box">
-            <div class="empty-icon">
-                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M6 2h9l5 5v15H6z" />
-                    <path d="M14 2v6h6" />
-                </svg>
-            </div>
-            <strong>No encontramos solicitudes</strong>
-            <span>Cambia los filtros o vuelve a intentarlo.</span>
-        </div>
-
-        <!-- TABLA DE DATOS -->
-        <div v-else class="table-wrapper">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Alumno</th>
-                        <th>Matrícula</th>
-                        <th>Grupo</th>
-                        <th>Periodo</th>
-                        <th>Documentos</th>
-                        <th>Descuento</th>
-                        <th>Estado</th>
-                        <th class="text-right">Acción</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="solicitud in solicitudesFiltradas" :key="solicitud.id">
-                        <td>
-                            <div class="student-cell">
-                                <div class="student-avatar">
-                                    {{ (alumnoDe(solicitud).name || alumnoDe(solicitud).nombre || 'A').charAt(0).toUpperCase() }}
-                                </div>
-                                <div>
-                                    <strong>{{ alumnoDe(solicitud).name || alumnoDe(solicitud).nombre || 'Alumno' }}</strong>
-                                    <span>{{ folioDe(solicitud) }}</span>
-                                </div>
-                            </div>
-                        </td>
-                        <td>{{ alumnoDe(solicitud).matricula || '—' }}</td>
-                        <td>{{ grupoDe(solicitud) }}</td>
-                        <td>{{ periodoDe(solicitud) }}</td>
-                        <td>
-                            <div class="docs-count">
-                                {{ obtenerDocumentos(solicitud).length }}
-                                <span>archivo(s)</span>
-                            </div>
-                        </td>
-
-                        <!-- CELDA DE DESCUENTO ESTILO TUTOR -->
-                        <td>
-                            <div v-if="solicitud.porcentaje_beca || solicitud.porcentaje_descuento" class="discount-badge">
-                                {{ parseFloat(solicitud.porcentaje_beca || solicitud.porcentaje_descuento) }}%
-                            </div>
-                            <span v-else class="no-discount">N/A</span>
-                        </td>
-
-                        <td>
-                            <span class="status-badge" :class="claseEstado(solicitud.estado || solicitud.estatus)">
-                                {{ textoEstado(solicitud.estado || solicitud.estatus) }}
-                            </span>
-                        </td>
-                        <td class="text-right">
-                            <button 
-                                type="button" 
-                                class="review-button" 
-                                @click="$emit('revisar', solicitud)"
-                            >
-                                Revisar
-                            </button>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </section>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-/* ================================================================
-   CONTENEDOR GENERAL DE LA SECCIÓN
-================================================================ */
-.tabla-seccion-wrapper {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+.tabla-wrapper {
+  width: 100%;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
 }
 
-/* ================================================================
-   TARJETA FILTRO POR GRUPO (NUEVO BLOQUE SUPERIOR)
-================================================================ */
-.grupo-filtro-card {
-    border: 1px solid #e3e7e4;
-    border-radius: 21px;
-    background: #fff;
-    padding: 20px 25px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-shadow: 0 13px 38px rgba(28, 40, 33, .05);
-}
-
-.eyebrow-grupo {
-    display: block;
-    color: #8a918d;
-    font-size: 8px;
-    font-weight: 850;
-    letter-spacing: .16em;
-    text-transform: uppercase;
-}
-
-.grupo-nombre {
-    margin: 4px 0 0;
-    font-size: 20px;
-    font-weight: 850;
-    color: #2e3531;
-}
-
-.back-button {
-    height: 37px;
-    padding: 0 14px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid #e1e5e2;
-    border-radius: 10px;
-    background: #f6f8f7;
-    color: #4a524e;
-    font-size: 9px;
-    font-weight: 850;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.back-button:hover {
-    background: #edf2ee;
-    color: #247548;
-    border-color: #d2ded5;
-}
-
-/* ================================================================
-   REQUESTS CARD
-================================================================ */
-.requests-card {
-    border: 1px solid #e3e7e4;
-    border-radius: 21px;
-    background: #fff;
-    overflow: hidden;
-    box-shadow: 0 13px 38px rgba(28, 40, 33, .05);
-}
-
-.requests-heading {
-    padding: 24px 25px 18px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid #edf0ee;
+.header-seguimiento {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .eyebrow {
-    display: block;
-    color: #8a918d;
-    font-size: 8px;
-    font-weight: 850;
-    letter-spacing: .16em;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8c938f;
+  font-weight: 850;
+  display: block;
+  margin-bottom: 2px;
 }
 
-.requests-heading h2 {
-    margin: 6px 0 3px;
-    font-size: 19px;
+.info-grupo-titulo h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #272e2a;
 }
 
-.requests-heading p {
-    margin: 0;
-    color: #989e9b;
-    font-size: 9px;
+.info-grupo-titulo p {
+  margin: 2px 0 0;
+  font-size: 10px;
+  color: #8c938f;
 }
 
-.refresh-button {
-    height: 37px;
-    padding: 0 13px;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    border: 1px solid #e1e5e2;
-    border-radius: 10px;
-    background: #fff;
-    color: #626a66;
-    font-size: 9px;
-    font-weight: 800;
-    cursor: pointer;
+.acciones-header {
+  display: flex;
+  gap: 8px;
 }
 
-.refresh-button:hover {
-    background: #f6f8f7;
+.btn-secundario {
+  padding: 6px 12px;
+  border: 1px solid #e1e5e2;
+  border-radius: 10px;
+  background: #f4f6f5;
+  color: #39413d;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-secundario:hover {
+  background: #e2e6e3;
 }
 
-/* FILTERS */
-.filters {
-    padding: 15px 24px;
-    display: grid;
-    grid-template-columns: 1fr 235px;
-    gap: 11px;
-    background: #fbfcfb;
-    border-bottom: 1px solid #edf0ee;
+.filtros-barra {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 }
 
-.search-field {
-    position: relative;
-    display: flex;
-    align-items: center;
+.input-busqueda, .select-estado {
+  padding: 9px 14px;
+  border: 1px solid #e1e5e2;
+  border-radius: 10px;
+  font-size: 11px;
+  background: #fff;
+  color: #272e2a;
+  outline: none;
+}
+.input-busqueda {
+  flex: 1;
+  min-width: 240px;
+}
+.input-busqueda:focus, .select-estado:focus {
+  border-color: #247548;
+  box-shadow: 0 0 0 3px rgba(36, 117, 72, 0.1);
 }
 
-.search-field svg {
-    position: absolute;
-    left: 13px;
-    color: #9da39f;
+.tabla-container {
+  width: 100%;
+  overflow-x: auto;
 }
 
-.search-field input {
-    width: 100%;
-    height: 40px;
-    border: 1px solid #e1e5e2;
-    border-radius: 11px;
-    padding: 0 13px 0 40px;
-    background: #fff;
-    color: #404743;
-    outline: 0;
-    font-size: 10px;
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 11px;
 }
 
-.search-field input:focus {
-    border-color: #6ca583;
-    box-shadow: 0 0 0 3px #edf6f1;
+.tabla th {
+  padding: 14px 18px;
+  border-bottom: 1px solid #edf0ee;
+  color: #8c938f;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.filter-select {
-    height: 40px;
-    border: 1px solid #e1e5e2;
-    border-radius: 11px;
-    padding: 0 12px;
-    background: #fff;
-    color: #505753;
-    outline: 0;
-    font-size: 10px;
-    font-weight: 700;
+.tabla td {
+  padding: 14px 18px;
+  border-bottom: 1px solid #f2f5f3;
+  vertical-align: middle;
 }
 
-/* TABLE */
-.table-wrapper {
-    overflow-x: auto;
+.tabla tbody tr:hover {
+  background: #fbfcfb;
 }
 
-table {
-    width: 100%;
-    min-width: 850px;
-    border-collapse: collapse;
+.text-right { text-align: right; }
+.text-muted { color: #5a625d; font-weight: 600; }
+
+.periodo-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  background: #f4f6f5;
+  border: 1px solid #e1e5e2;
+  border-radius: 6px;
+  font-size: 10px;
+  color: #39413d;
+  font-weight: 700;
 }
 
-thead th {
-    padding: 12px 17px;
-    background: #fafbfa;
-    color: #969c98;
-    border-bottom: 1px solid #ecefec;
-    text-align: left;
-    font-size: 8px;
-    font-weight: 850;
-    text-transform: uppercase;
-    letter-spacing: .08em;
+/* ALUMNO */
+.col-alumno {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-tbody td {
-    padding: 14px 17px;
-    border-bottom: 1px solid #f0f2f1;
-    color: #59605c;
-    font-size: 10px;
+.avatar-sm {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #eaf5ee;
+  color: #247548;
+  font-weight: 800;
+  font-size: 11px;
 }
 
-tbody tr:last-child td {
-    border-bottom: 0;
+.info-alumno {
+  display: flex;
+  flex-direction: column;
 }
 
-tbody tr:hover {
-    background: #fcfdfc;
+.info-alumno strong {
+  color: #272e2a;
+  font-size: 11px;
 }
 
-.text-right {
-    text-align: right;
+.info-alumno small {
+  color: #939a96;
+  font-size: 9px;
 }
 
-.student-cell {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+/* BADGES */
+.badge-docs {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #4a524d;
 }
 
-.student-avatar {
-    width: 34px;
-    height: 34px;
-    flex-shrink: 0;
-    display: grid;
-    place-items: center;
-    border-radius: 10px;
-    background: #edf5f0;
-    color: #247548;
-    font-size: 11px;
-    font-weight: 850;
+.badge-estado {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: capitalize;
 }
 
-.student-cell div:last-child {
-    display: flex;
-    flex-direction: column;
+.badge-estado.warning { background: #fff5da; color: #956516; }
+.badge-estado.info { background: #eaf3fa; color: #356b91; }
+.badge-estado.success { background: #eaf5ee; color: #247548; }
+.badge-estado.danger { background: #faedf1; color: #85243d; }
+.badge-estado.purple { background: #f3ebfc; color: #6b21a8; }
+.badge-estado.neutral { background: #f0f2f1; color: #505753; }
+
+/* ACCIONES (IGUAL A VISTA TUTOR) */
+.acciones {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
-.student-cell strong {
-    color: #333a36;
-    font-size: 10px;
+.btn-detalle {
+  padding: 6px 12px;
+  border: 1px solid #e1e5e2;
+  border-radius: 18px;
+  background: #fff;
+  color: #247548;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.student-cell span {
-    margin-top: 3px;
-    color: #a0a5a2;
-    font-size: 8px;
+.btn-detalle:hover {
+  background: #edf5f0;
+  border-color: #247548;
 }
 
-.docs-count {
-    display: flex;
-    flex-direction: column;
-    font-weight: 750;
-    color: #434b47;
+.btn-confirmar {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 18px;
+  background: #00875a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: background 0.2s ease;
 }
 
-.docs-count span {
-    margin-top: 2px;
-    color: #9fa5a1;
-    font-size: 8px;
-    font-weight: 500;
+.btn-confirmar:hover {
+  background: #006644;
 }
 
-/* DESCUENTO - ESTILO TUTOR EXACTO */
-.discount-badge {
-    display: inline-block;
-    font-weight: 850;
-    color: #216841;
+/* ESTADOS VACÍOS */
+.estado-vacio {
+  padding: 50px 20px;
+  text-align: center;
+  color: #8c938f;
 }
 
-.no-discount {
-    color: #a0a5a2;
-    font-size: 9px;
+.error-text {
+  color: #dc2626;
 }
 
-.status-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 6px 9px;
-    border-radius: 99px;
-    font-size: 8px;
-    font-weight: 800;
-    white-space: nowrap;
+.vacio-icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 12px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #f4f6f5;
+  color: #9ca29f;
 }
 
-.status-badge.warning { color: #90611b; background: #fff4d7; }
-.status-badge.info { color: #32688f; background: #e9f3fa; }
-.status-badge.success { color: #216841; background: #e8f5ed; }
-.status-badge.danger { color: #86253d; background: #faeaf0; }
-.status-badge.purple { color: #6e4992; background: #f2ebf8; }
-.status-badge.neutral { color: #707773; background: #f0f2f1; }
-
-.review-button {
-    height: 32px;
-    padding: 0 12px;
-    border: 1px solid #dbe5de;
-    border-radius: 99px;
-    background: #f4f8f5;
-    color: #267348;
-    font-size: 8px;
-    font-weight: 850;
-    cursor: pointer;
+.estado-vacio strong {
+  display: block;
+  color: #39413d;
+  font-size: 13px;
 }
 
-.review-button:hover {
-    background: #eaf4ed;
-}
-
-/* EMPTY / LOADING */
-.loading-box,
-.empty-box {
-    min-height: 320px;
-    padding: 40px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-}
-
-.loading-box strong,
-.empty-box strong {
-    margin-top: 13px;
-    color: #454d49;
-    font-size: 12px;
-}
-
-.loading-box span,
-.empty-box span {
-    margin-top: 5px;
-    color: #969d99;
-    font-size: 9px;
+.estado-vacio p {
+  margin: 4px 0 0;
+  font-size: 10px;
 }
 
 .spinner {
-    width: 35px;
-    height: 35px;
-    border: 3px solid #e8edea;
-    border-top-color: #247548;
-    border-radius: 50%;
-    animation: spin .8s linear infinite;
+  width: 28px;
+  height: 28px;
+  margin: 0 auto 12px;
+  border: 3px solid #e2e6e3;
+  border-top-color: #247548;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-.empty-icon {
-    width: 45px;
-    height: 45px;
-    display: grid;
-    place-items: center;
-    border-radius: 13px;
-    color: #76807a;
-    background: #f0f3f1;
-}
-
-.empty-icon.error {
-    color: #84253c;
-    background: #faeaf0;
-    font-size: 17px;
-    font-weight: 850;
-}
-
-.primary-button {
-    min-height: 40px;
-    padding: 0 15px;
-    border-radius: 10px;
-    font-size: 9px;
-    font-weight: 850;
-    cursor: pointer;
-    border: 0;
-    background: #247548;
-    color: #fff;
-}
-
-.header-buttons {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-/* RESPONSIVE */
-@media (max-width: 800px) {
-    .filters { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 520px) {
-    .requests-heading,
-    .grupo-filtro-card { padding: 19px 17px 15px; }
-    .filters { padding: 12px 16px; }
+  to { transform: rotate(360deg); }
 }
 </style>

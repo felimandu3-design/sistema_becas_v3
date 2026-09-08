@@ -1,10 +1,12 @@
 <script setup>
 const props = defineProps({
   solicitudes: { type: Array, default: () => [] },
-  cargando: { type: Boolean, default: false }
+  cargando: { type: Boolean, default: false },
+  tabActual: { type: String, default: 'resumen' }
 })
 
-const emit = defineEmits(['seleccionar'])
+// Emitimos tanto la selección como la acción de confirmar
+const emit = defineEmits(['seleccionar', 'confirmar'])
 
 /*
 |--------------------------------------------------------------------------
@@ -19,9 +21,9 @@ function obtenerAlumno(solicitud) {
             solicitud.alumno?.name || 
             'Alumno',
     matricula: solicitud.usuario?.matricula || 
-               solicitud.alumno?.matricula || 
-               solicitud.matricula || 
-               '—'
+                solicitud.alumno?.matricula || 
+                solicitud.matricula || 
+                '—'
   }
 }
 
@@ -50,6 +52,19 @@ function obtenerDocumentos(solicitud) {
   return Array.isArray(docs) ? docs : []
 }
 
+function obtenerDescuento(solicitud) {
+  const estatus = (solicitud.estado || solicitud.estatus || '').toUpperCase()
+
+  const valor = solicitud.porcentaje_beca ?? solicitud.descuento ?? null
+
+  if (valor === null || valor === undefined || valor === '' || valor === 'N/A') {
+    return estatus === 'ACEPTADA' ? '50%' : 'N/A'
+  }
+
+  const strValor = valor.toString().trim()
+  return strValor.includes('%') ? strValor : `${strValor}%`
+}
+
 function normalizarEstado(estado) {
   return String(estado || 'PENDIENTE').trim().toUpperCase()
 }
@@ -62,6 +77,8 @@ function textoEstado(estado) {
     ACEPTADA: 'Aceptada',
     RECHAZADA: 'Rechazada',
     DOCUMENTACION_INCOMPLETA: 'Documentación incompleta',
+    REVISADO_TUTOR: 'Revisado por Tutor',
+    CONFIRMADO: 'Confirmado',
   }
   return estados[valor] || valor
 }
@@ -74,103 +91,119 @@ function claseEstado(estado) {
     ACEPTADA: 'success',
     RECHAZADA: 'danger',
     DOCUMENTACION_INCOMPLETA: 'purple',
+    REVISADO_TUTOR: 'success',
+    CONFIRMADO: 'success',
   }
   return clases[valor] || 'neutral'
 }
 </script>
 
 <template>
-  <div class="requests-card">
-    <!-- ESTADO: CARGANDO -->
-    <div v-if="cargando" class="loading-box">
+  <div class="tabla-wrapper">
+    <!-- Estado de Carga -->
+    <div v-if="cargando" class="estado-vacio">
       <div class="spinner"></div>
-      <strong>Consultando solicitudes</strong>
-      <span>Espera un momento...</span>
+      <p>Cargando solicitudes...</p>
     </div>
 
-    <!-- ESTADO: VACÍO -->
-    <div v-else-if="!solicitudes || solicitudes.length === 0" class="empty-box">
-      <div class="empty-icon">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M6 2h9l5 5v15H6z" />
-          <path d="M14 2v6h6" />
+    <!-- Sin datos -->
+    <div v-else-if="!props.solicitudes || props.solicitudes.length === 0" class="estado-vacio">
+      <div class="vacio-icon">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
         </svg>
       </div>
       <strong>No hay solicitudes registradas</strong>
-      <span>Aún no existen registros en esta sección.</span>
+      <p>Aún no existen registros en esta sección.</p>
     </div>
 
-    <!-- TABLA DE DATOS -->
-    <div v-else class="table-wrapper">
-      <table>
+    <!-- Tabla de datos -->
+    <div v-else class="tabla-container">
+      <table class="tabla">
         <thead>
           <tr>
-            <th>Alumno</th>
-            <th>Matrícula</th>
-            <th>Grupo</th>
-            <th>Periodo</th>
-            <th>Documentos</th>
-            <th>Descuento</th>
-            <th>Estado</th>
-            <th class="text-right">Acción</th>
+            <th>ALUMNO</th>
+            <th>MATRÍCULA</th>
+            <th>GRUPO</th>
+            <th>PERIODO</th>
+            <th>DOCUMENTOS</th>
+            <th>DESCUENTO</th>
+            <th>ESTADO</th>
+            <th class="text-right">ACCIÓN</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="solicitud in solicitudes" :key="solicitud.id">
-            <!-- 1. ALUMNO (Avatar, Nombre y Folio) -->
+          <tr v-for="solicitud in props.solicitudes" :key="solicitud.id">
+            <!-- ALUMNO -->
             <td>
-              <div class="student-cell">
-                <div class="student-avatar">
+              <div class="col-alumno">
+                <div class="avatar-sm">
                   {{ obtenerAlumno(solicitud).nombre.charAt(0).toUpperCase() }}
                 </div>
-                <div>
+                <div class="info-alumno">
                   <strong>{{ obtenerAlumno(solicitud).nombre }}</strong>
-                  <span>{{ obtenerFolio(solicitud) }}</span>
+                  <small>{{ obtenerFolio(solicitud) }}</small>
                 </div>
               </div>
             </td>
 
-            <!-- 2. MATRÍCULA -->
-            <td>{{ obtenerAlumno(solicitud).matricula }}</td>
-
-            <!-- 3. GRUPO -->
-            <td>{{ obtenerGrupo(solicitud) }}</td>
-
-            <!-- 4. PERIODO -->
-            <td>{{ obtenerPeriodo(solicitud) }}</td>
-
-            <!-- 5. DOCUMENTOS -->
-            <td>
-              <div class="docs-count">
-                {{ obtenerDocumentos(solicitud).length }}
-                <span>archivo(s)</span>
-              </div>
+            <!-- MATRÍCULA -->
+            <td class="text-muted">
+              {{ obtenerAlumno(solicitud).matricula }}
             </td>
 
-            <!-- 6. PORCENTAJE DESCUENTO -->
-            <td>
-              <div class="discount-badge" v-if="solicitud.porcentaje_descuento">
-                {{ solicitud.porcentaje_descuento }}%
-              </div>
-              <span v-else class="no-discount">N/A</span>
+            <!-- GRUPO -->
+            <td class="text-muted">
+              {{ obtenerGrupo(solicitud) }}
             </td>
 
-            <!-- 7. ESTADO -->
+            <!-- PERIODO -->
+            <td class="text-muted">
+              {{ obtenerPeriodo(solicitud) }}
+            </td>
+
+            <!-- DOCUMENTOS -->
             <td>
-              <span class="status-badge" :class="claseEstado(solicitud.estado || solicitud.status)">
-                {{ textoEstado(solicitud.estado || solicitud.status) }}
+              <span class="badge-docs">
+                <strong>{{ obtenerDocumentos(solicitud).length }}</strong>
+                <small>archivo(s)</small>
               </span>
             </td>
 
-            <!-- 8. ACCIONES -->
+            <!-- DESCUENTO -->
+            <td class="text-muted">
+                {{ obtenerDescuento(solicitud) }}
+            </td>
+
+            <!-- ESTADO -->
+            <td>
+              <span :class="['badge-estado', claseEstado(solicitud.estado || solicitud.estatus)]">
+                {{ textoEstado(solicitud.estado || solicitud.estatus) }}
+              </span>
+            </td>
+
+            <!-- ACCIÓN CONDICIONADA -->
             <td class="text-right">
-              <button 
-                type="button" 
-                class="review-button" 
-                @click="$emit('seleccionar', solicitud)"
-              >
-                Ver detalle
-              </button>
+              <div class="acciones">
+                <button 
+                  type="button" 
+                  class="btn-detalle" 
+                  @click="emit('seleccionar', solicitud)"
+                >
+                  Ver detalle
+                </button>
+
+                <!-- Botón Confirmar solo visible en la pestaña 'resumen' -->
+                <button 
+                  v-if="props.tabActual === 'resumen'"
+                  type="button" 
+                  class="btn-confirmar" 
+                  @click="emit('confirmar', solicitud)"
+                >
+                  Confirmar
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -180,202 +213,184 @@ function claseEstado(estado) {
 </template>
 
 <style scoped>
-.requests-card {
-  border: 1px solid #e3e7e4;
-  border-radius: 21px;
-  background: #fff;
-  overflow: hidden;
-  box-shadow: 0 13px 38px rgba(28, 40, 33, .05);
+.tabla-wrapper {
+  width: 100%;
 }
 
-.table-wrapper {
+.tabla-container {
+  width: 100%;
   overflow-x: auto;
 }
 
-table {
+.tabla {
   width: 100%;
-  min-width: 950px;
   border-collapse: collapse;
-}
-
-thead th {
-  padding: 14px 17px;
-  background: #fafbfa;
-  color: #969c98;
-  border-bottom: 1px solid #ecefec;
   text-align: left;
-  font-size: 8px;
-  font-weight: 850;
-  text-transform: uppercase;
-  letter-spacing: .08em;
+  font-size: 11px;
 }
 
-tbody td {
-  padding: 14px 17px;
-  border-bottom: 1px solid #f0f2f1;
-  color: #59605c;
-  font-size: 10px;
+.tabla th {
+  padding: 14px 18px;
+  border-bottom: 1px solid #edf0ee;
+  color: #8c938f;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tabla td {
+  padding: 14px 18px;
+  border-bottom: 1px solid #f2f5f3;
   vertical-align: middle;
 }
 
-tbody tr:last-child td {
-  border-bottom: 0;
+.tabla tbody tr:hover {
+  background: #fbfcfb;
 }
 
-tbody tr:hover {
-  background: #fcfdfc;
-}
+.text-right { text-align: right; }
+.text-muted { color: #5a625d; font-weight: 600; }
 
-.text-right {
-  text-align: right;
-}
-
-/* Celda de Alumno con Avatar */
-.student-cell {
+/* ALUMNO */
+.col-alumno {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.student-avatar {
-  width: 34px;
-  height: 34px;
-  flex-shrink: 0;
+.avatar-sm {
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  background: #edf5f0;
+  border-radius: 50%;
+  background: #eaf5ee;
   color: #247548;
+  font-weight: 800;
   font-size: 11px;
-  font-weight: 850;
 }
 
-.student-cell div:last-child {
+.info-alumno {
   display: flex;
   flex-direction: column;
 }
 
-.student-cell strong {
-  color: #333a36;
-  font-size: 10px;
+.info-alumno strong {
+  color: #272e2a;
+  font-size: 11px;
 }
 
-.student-cell span {
-  margin-top: 3px;
-  color: #a0a5a2;
-  font-size: 8px;
-}
-
-/* Documentos contador */
-.docs-count {
-  display: flex;
-  flex-direction: column;
-  font-weight: 750;
-  color: #434b47;
-}
-
-.docs-count span {
-  margin-top: 2px;
-  color: #9fa5a1;
-  font-size: 8px;
-  font-weight: 500;
-}
-
-/* Badge Descuento */
-.discount-badge {
-  display: inline-block;
-  font-weight: 850;
-  color: #216841;
-}
-
-.no-discount {
-  color: #a0a5a2;
+.info-alumno small {
+  color: #939a96;
   font-size: 9px;
 }
 
-/* Badges de Estado */
-.status-badge {
+/* BADGES */
+.badge-docs {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 6px 11px;
-  border-radius: 99px;
-  font-size: 8px;
-  font-weight: 800;
-  white-space: nowrap;
+  gap: 3px;
+  color: #4a524d;
 }
 
-.status-badge.warning { color: #90611b; background: #fff4d7; }
-.status-badge.info { color: #32688f; background: #e9f3fa; }
-.status-badge.success { color: #216841; background: #e8f5ed; }
-.status-badge.danger { color: #86253d; background: #faeaf0; }
-.status-badge.purple { color: #6e4992; background: #f2ebf8; }
-.status-badge.neutral { color: #707773; background: #f0f2f1; }
+.badge-estado {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
 
-/* Botón de Acción */
-.review-button {
-  height: 32px;
-  padding: 0 14px;
-  border: 1px solid #dbe5de;
-  border-radius: 99px;
-  background: #f4f8f5;
-  color: #267348;
-  font-size: 8px;
-  font-weight: 850;
+.badge-estado.warning { background: #fff5da; color: #956516; }
+.badge-estado.info { background: #eaf3fa; color: #356b91; }
+.badge-estado.success { background: #eaf5ee; color: #247548; }
+.badge-estado.danger { background: #faedf1; color: #85243d; }
+.badge-estado.purple { background: #f3ebfc; color: #6b21a8; }
+.badge-estado.neutral { background: #f0f2f1; color: #505753; }
+
+/* ACCIONES */
+.acciones {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn-detalle {
+  padding: 6px 12px;
+  border: 1px solid #e1e5e2;
+  border-radius: 18px;
+  background: #fff;
+  color: #247548;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-detalle:hover {
+  background: #edf5f0;
+  border-color: #247548;
+}
+
+.btn-confirmar {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 18px;
+  background: #00875a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 750;
   cursor: pointer;
   transition: background 0.2s ease;
 }
 
-.review-button:hover {
-  background: #eaf4ed;
+.btn-confirmar:hover {
+  background: #006644;
 }
 
-/* Estados de Carga y Vacío */
-.loading-box,
-.empty-box {
-  min-height: 250px;
-  padding: 40px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+/* ESTADOS VACÍOS */
+.estado-vacio {
+  padding: 50px 20px;
   text-align: center;
+  color: #8c938f;
 }
 
-.loading-box strong,
-.empty-box strong {
-  margin-top: 13px;
-  color: #454d49;
-  font-size: 12px;
+.vacio-icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 12px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #f4f6f5;
+  color: #9ca29f;
 }
 
-.loading-box span,
-.empty-box span {
-  margin-top: 5px;
-  color: #969d99;
-  font-size: 9px;
+.estado-vacio strong {
+  display: block;
+  color: #39413d;
+  font-size: 13px;
+}
+
+.estado-vacio p {
+  margin: 4px 0 0;
+  font-size: 10px;
 }
 
 .spinner {
-  width: 35px;
-  height: 35px;
-  border: 3px solid #e8edea;
+  width: 28px;
+  height: 28px;
+  margin: 0 auto 12px;
+  border: 3px solid #e2e6e3;
   border-top-color: #247548;
   border-radius: 50%;
-  animation: spin .8s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-.empty-icon {
-  width: 45px;
-  height: 45px;
-  display: grid;
-  place-items: center;
-  border-radius: 13px;
-  color: #76807a;
-  background: #f0f3f1;
 }
 </style>

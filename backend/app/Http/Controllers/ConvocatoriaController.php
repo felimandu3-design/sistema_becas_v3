@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Convocatoria;
 use App\Models\User;
+use App\Models\Solicitud;
 use App\Notifications\ConvocatoriaCerradaNotification;
 use App\Notifications\ConvocatoriaPublicadaNotification;
 use Illuminate\Http\Request;
@@ -12,6 +13,8 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\BecariosExport;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class ConvocatoriaController extends Controller
 {
@@ -348,10 +351,51 @@ class ConvocatoriaController extends Controller
         Notification::send($alumnos, new ConvocatoriaCerradaNotification($convocatoria));
     }
     // SUPERADMIN: DESCARGAR EXCEL DE BECARIOS
-    public function exportarExcelPadron($id) {
-        $convocatoria = Convocatoria::findOrFail($id);
-        $nombreArchivo = 'Padron_Becarios_' . str_replace(' ', '_', $convocatoria->nombre) . '.xlsx';
+    public function exportarExcelPadron($id)
+{
+    // 1. Obtener los registros
+    $solicitudes = Solicitud::where('convocatoria_id', $id)
+        ->with(['usuario'])
+        ->get();
+
+    // 2. Crear hoja de cálculo
+    $spreadsheet = new Spreadsheet();
+    $sheet = $spreadsheet->getActiveSheet();
+
+    // 3. Encabezados (Solo Matrícula, Alumno y Descuento)
+    $sheet->setCellValue('A1', 'Matrícula');
+    $sheet->setCellValue('B1', 'Alumno');
+    $sheet->setCellValue('C1', 'Descuento');
+
+    // Estilo para encabezados (Negrita)
+    $sheet->getStyle('A1:C1')->getFont()->setBold(true);
+
+    // 4. Llenar filas de datos
+    $row = 2;
+    foreach ($solicitudes as $s) {
+        $alumno = $s->usuario ?? $s->alumno ?? null;
+        $descuento = $s->porcentaje_beca ? round($s->porcentaje_beca) . '%' : 'N/A';
+
+        $sheet->setCellValue('A' . $row, $alumno?->matricula ?? '—');
+        $sheet->setCellValue('B' . $row, $alumno?->name ?? 'Sin nombre');
+        $sheet->setCellValue('C' . $row, $descuento);
         
-        return Excel::download(new BecariosExport($id), $nombreArchivo);
+        $row++;
     }
+
+    // Auto-ajustar ancho de las 3 columnas
+    foreach (range('A', 'C') as $col) {
+        $sheet->getColumnDimension($col)->setAutoSize(true);
+    }
+
+    // 5. Descargar archivo
+    $fileName = "padron_becarios_convocatoria_{$id}.xlsx";
+    $writer = new Xlsx($spreadsheet);
+
+    return response()->streamDownload(function () use ($writer) {
+        $writer->save('php://output');
+    }, $fileName, [
+        'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ]);
+}
 }

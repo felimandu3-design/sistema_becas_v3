@@ -14,7 +14,7 @@ class SolicitudBecaController extends Controller
         $solicitudes = Solicitud::with([
             'usuario.carrera',
             'usuario.grupoRelacion.carrera',
-            'convocatoria',
+            'convocatoria.periodo',
             'carrera',
             'grupoRelacion.carrera',
             'documentos'
@@ -115,6 +115,17 @@ class SolicitudBecaController extends Controller
             'solicitud' => $solicitud
         ]);
     }
+
+    public function confirmarSolicitud($id)
+{
+    $solicitud = Solicitud::findOrFail($id);
+    $solicitud->estado = 'REVISADO_TUTOR'; 
+    $solicitud->save();
+
+    return response()->json([
+        'message' => 'Solicitud confirmada y enviada a Solicitudes Revisadas correctamente.'
+    ]);
+}
 
     // DICTAMINAR
     public function dictaminar(Request $request, Solicitud $solicitud) 

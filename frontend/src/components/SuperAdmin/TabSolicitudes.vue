@@ -47,6 +47,19 @@ function carreraSolicitud(s) {
 function periodoSolicitud(s) { return s?.convocatoria?.periodo?.nombre || s?.periodo?.nombre || 'Sin periodo' }
 function folio(s) { return s?.folio || `BEC-${String(s?.id || 0).padStart(5, '0')}` }
 
+// --- FUNCIONES AUXILIARES PARA LAS NUEVAS COLUMNAS ---
+function grupoSolicitud(s) {
+  const alumno = alumnoDe(s)
+  return s?.grupo_relacion?.nombre || s?.grupoRelacion?.nombre || alumno?.grupo_relacion?.nombre || alumno?.grupoRelacion?.nombre || '—'
+}
+function totalDocumentos(s) {
+  return Array.isArray(s?.documentos) ? s.documentos.length : 0
+}
+function descuentoSolicitud(s) {
+  const porcentaje = s?.porcentaje_beca || s?.porcentajeBeca || s?.porcentaje
+  return porcentaje ? `${Math.round(porcentaje)}%` : 'N/A'
+}
+
 // 5. El motor de búsqueda y filtros
 const solicitudesFiltradas = computed(() => {
   const q = busqueda.value.trim().toLowerCase()
@@ -56,7 +69,7 @@ const solicitudesFiltradas = computed(() => {
     const idCarrera = alumno?.carrera_id || s?.carrera_id
     const estadoSolicitud = estado(s.estado || s.estatus)
     
-    const universo = [alumno.name, alumno.matricula, alumno.email, folio(s), carreraSolicitud(s)].filter(Boolean).join(' ').toLowerCase()
+    const universo = [alumno.name, alumno.matricula, alumno.email, folio(s), carreraSolicitud(s), grupoSolicitud(s)].filter(Boolean).join(' ').toLowerCase()
 
     return (
       (filtroPeriodo.value === 'todos' || String(idPeriodo) === String(filtroPeriodo.value)) &&
@@ -136,8 +149,10 @@ const solicitudesFiltradas = computed(() => {
           <th>Folio</th>
           <th>Alumno</th>
           <th>Matrícula</th>
-          <th>Carrera</th>
+          <th>Grupo</th>
           <th>Periodo</th>
+          <th>Documentos</th>
+          <th>Descuento</th>
           <th>Estado</th>
           <th>Acciones</th>
         </tr>
@@ -147,8 +162,17 @@ const solicitudesFiltradas = computed(() => {
           <td>{{ folio(s) }}</td>
           <td><strong>{{ alumnoDe(s).name || 'Alumno' }}</strong></td>
           <td>{{ alumnoDe(s).matricula || '—' }}</td>
-          <td>{{ carreraSolicitud(s) }}</td>
+          <td>{{ grupoSolicitud(s) }}</td>
           <td>{{ periodoSolicitud(s) }}</td>
+          <td>
+            <div>{{ totalDocumentos(s) }}</div>
+            <small style="color: #8a948e; font-size: 11px;">archivo(s)</small>
+          </td>
+          <td>
+            <span :class="['discount-text', { 'active': descuentoSolicitud(s) !== 'N/A' }]">
+              {{ descuentoSolicitud(s) }}
+            </span>
+          </td>
           <td>
             <span class="badge" :class="claseEstado(s.estado || s.estatus)">
               {{ nombreEstado(s.estado || s.estatus) }}
@@ -300,5 +324,15 @@ button:disabled {
   .action-widget {
     width: 100%;
   }
+}
+
+.discount-text {
+  color: #8a948e;
+  font-size: 13px;
+}
+
+.discount-text.active {
+  color: #087846;
+  font-weight: 800;
 }
 </style>

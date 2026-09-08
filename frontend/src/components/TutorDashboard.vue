@@ -8,6 +8,8 @@ import SolicitudesFiltros from './Solicitudes/SolicitudesFiltros.vue'
 import SolicitudesTabla from './Solicitudes/SolicitudesTabla.vue'
 import SolicitudDetalleModal from './Solicitudes/SolicitudDetalleModal.vue'
 
+const tabActual = ref('resumen')
+
 // 1. Recibir los datos del usuario autenticado que envía App.vue
 const props = defineProps({
   usuario: {
@@ -32,11 +34,65 @@ const {
 } = useSolicitudes()
 
 const solicitudSeleccionada = ref(null)
-const vistaActual = ref('resumen')
 const modalLogout = ref(false)
 
 const abrirModal = (solicitud) => { solicitudSeleccionada.value = solicitud }
 const cerrarModal = () => { solicitudSeleccionada.value = null }
+
+/*
+|--------------------------------------------------------------------------
+| FILTRADO POR PESTAÑA (RESUMEN VS REVISADAS)
+|--------------------------------------------------------------------------
+*/
+const solicitudesSegunTab = computed(() => {
+  // Extraer el array real soportando respuestas paginadas de Laravel
+  let lista = []
+  if (Array.isArray(solicitudes.value)) {
+    lista = solicitudes.value
+  } else if (solicitudes.value && Array.isArray(solicitudes.value.data)) {
+    lista = solicitudes.value.data
+  }
+
+  if (!lista.length) return []
+
+  return lista.filter(s => {
+    // Extraer y normalizar estado
+    const estadoRaw = s.estado || s.estatus || s.status || s.estado_solicitud || ''
+    const val = estadoRaw.toString().toLowerCase().trim()
+
+    // Consideramos "pendiente" los estados iniciales
+    const esPendiente = val === 'pendiente' || val === 'sin_revisar' || val === '0' || val === ''
+
+    // 1. Filtrado por Pestaña Activa
+    if (tabActual.value === 'resumen') {
+      if (!esPendiente) return false
+    } else if (tabActual.value === 'revisadas') {
+      if (esPendiente) return false
+    }
+
+    // 2. Filtro por Select (Soporta 'todos', 'TODOS', null, '' o espacios)
+    if (filtroEstado.value) {
+      const filtro = filtroEstado.value.toString().toLowerCase().trim()
+      if (filtro !== 'todos' && filtro !== '' && filtro !== 'todos los estados') {
+        if (!val.includes(filtro)) return false
+      }
+    }
+
+    // 3. Filtro por Búsqueda de Texto
+    if (busqueda.value && busqueda.value.trim() !== '') {
+      const q = busqueda.value.toLowerCase().trim()
+      const nombre = (s.usuario?.name || s.alumno?.nombre || s.nombre || '').toLowerCase()
+      const matricula = (s.usuario?.matricula || s.matricula || s.alumno?.matricula || '').toString().toLowerCase()
+      const folio = (s.folio || '').toString().toLowerCase()
+
+      if (!nombre.includes(q) && !matricula.includes(q) && !folio.includes(q)) {
+        return false
+      }
+    }
+
+    return true
+  })
+})
 
 // Contadores defensivos para las tarjetas de estado
 const contarPorEstado = (estadoBuscado) => {
@@ -45,22 +101,17 @@ const contarPorEstado = (estadoBuscado) => {
   const target = estadoBuscado.toLowerCase().trim()
   
   return solicitudes.value.filter(s => {
-    // Revisa 'estado' o 'estatus' o 'status' y convierte a minúsculas
     const val = (s.estado || s.estatus || s.status || '').toString().toLowerCase().trim()
     
-    // Mapeo flexible para PENDIENTE
     if (target === 'pendiente') {
       return val === 'pendiente' || val === 'sin_revisar' || val === '0'
     }
-    // Mapeo flexible para EN_REVISION / SEGUIMIENTO
     if (target === 'en_revision' || target === 'seguimiento') {
       return val === 'en_revision' || val === 'revision' || val === 'seguimiento'
     }
-    // Mapeo flexible para ACEPTADA
     if (target === 'aceptada') {
       return val === 'aceptada' || val === 'aprobada' || val === 'dictaminada'
     }
-    // Mapeo flexible para RECHAZADA
     if (target === 'rechazada') {
       return val === 'rechazada' || val === 'no_aprobada'
     }
@@ -83,42 +134,35 @@ const totalAlumnosConSolicitud = computed(() => {
   return Array.isArray(solicitudes.value) ? solicitudes.value.length : 0
 })
 
-// 2. Obtener el grupo directamente del objeto usuario prop
+// Obtener el grupo directamente del objeto usuario prop
 const grupoAsignado = computed(() => {
-  // 1. Intentar obtenerlo desde el objeto de usuario
   if (props.usuario?.grupo?.nombre) return props.usuario.grupo.nombre
   if (props.usuario?.grupo?.clave) return props.usuario.grupo.clave
   if (typeof props.usuario?.grupo === 'string' && props.usuario.grupo.trim() !== '') {
     return props.usuario.grupo
   }
 
-  // 2. Fallback al recargar (F5): Si el usuario no trae el grupo cargado,
   if (solicitudes.value && solicitudes.value.length > 0) {
     const primeraSol = solicitudes.value[0]
     const grupoEncontrado = primeraSol.usuario?.grupo || primeraSol.grupo || primeraSol.alumno?.grupo
     if (grupoEncontrado) return grupoEncontrado
   }
 
-  // 3. Fallback final
   return 'Sin asignación'
 })
 
-// Carrera del grupo (Informativa)
-// Carrera del grupo asignado (Vista Tutor)
+// Carrera del grupo asignado
 const carreraAsignada = computed(() => {
   const u = props.usuario?.user || props.usuario
 
-  // 1. Si el profesor/tutor trae la carrera directa o a través de su grupo asignado
   if (u?.carrera?.nombre) return u.carrera.nombre
   if (u?.grupo?.carrera?.nombre) return u.grupo.carrera.nombre
   if (u?.grupo_relacion?.carrera?.nombre) return u.grupo_relacion.carrera.nombre
 
-  // 2. Extraer arreglo de solicitudes (manejando si viene array directo o paginado/en .data)
   const lista = Array.isArray(solicitudes.value) 
     ? solicitudes.value 
     : (solicitudes.value?.data || [])
 
-  // 3. Buscar la carrera en la primera solicitud del grupo de alumnos
   if (lista.length > 0) {
     const primeraSol = lista[0]
     return (
@@ -134,13 +178,10 @@ const carreraAsignada = computed(() => {
   return 'Sin asignación'
 })
 
-
 const cambiarEstadoSolicitud = async (id, nuevoEstado) => {
   try {
-    // 1. Obtener el token guardado tras el login (ajústalo al nombre con el que guardas tu token)
     const token = localStorage.getItem('token') || localStorage.getItem('auth_token')
 
-    // 2. Definir los headers de autenticación
     const config = {
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -149,13 +190,11 @@ const cambiarEstadoSolicitud = async (id, nuevoEstado) => {
       }
     }
 
-    // 3. Petición apuntando al puerto de Laravel
     await axios.patch(`http://127.0.0.1:8000/api/profesor/solicitudes/${id}/estatus`, {
       estatus: nuevoEstado,
       estado: nuevoEstado
     }, config)
 
-    // 4. Actualización reactiva de la vista
     if (solicitudSeleccionada.value) {
       solicitudSeleccionada.value.estado = nuevoEstado
       solicitudSeleccionada.value.estatus = nuevoEstado
@@ -175,7 +214,6 @@ const cambiarEstadoSolicitud = async (id, nuevoEstado) => {
     alert(`No se pudo actualizar: ${error.response?.data?.message || 'Error de permisos o ruta'}`)
   }
 }
-
 </script>
 
 <template>
@@ -196,24 +234,22 @@ const cambiarEstadoSolicitud = async (id, nuevoEstado) => {
           </div>
         </div>
 
-        <!-- Navegación central -->
+        <!-- Navegación central (Barra de pestañas superior) -->
         <nav class="navigation">
           <button 
-            type="button" 
-            :class="['navigation-button', { active: vistaActual === 'resumen' }]"
-            @click="vistaActual = 'resumen'"
+            type="button"
+            @click="tabActual = 'resumen'"
+            :class="['navigation-button', tabActual === 'resumen' ? 'active' : '']"
           >
             Resumen
           </button>
+
           <button 
-            type="button" 
-            :class="['navigation-button', { active: vistaActual === 'alumnos' }]"
-            @click="
-              vistaActual = 'alumnos';
-              document.getElementById('lista-solicitudes')?.scrollIntoView({ behavior: 'smooth' });
-            "
+            type="button"
+            @click="tabActual = 'revisadas'"
+            :class="['navigation-button', tabActual === 'revisadas' ? 'active' : '']"
           >
-            Alumnos
+            Solicitudes Revisadas
           </button>
         </nav>
 
@@ -278,80 +314,79 @@ const cambiarEstadoSolicitud = async (id, nuevoEstado) => {
         </div>
       </section>
 
-<!-- TARJETAS DE MÉTRICAS -->
-<section class="stats">
-  <article class="stat">
-    <div class="stat-icon neutral">
-      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      </svg>
-    </div>
-    <div>
-      <span>Alumnos</span>
-      <strong>{{ Array.isArray(solicitudes) ? solicitudes.length : (solicitudes?.data?.length || 0) }}</strong>
-      <small>Con solicitud</small>
-    </div>
-  </article>
+      <!-- TARJETAS DE MÉTRICAS -->
+      <section class="stats">
+        <article class="stat">
+          <div class="stat-icon neutral">
+            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            </svg>
+          </div>
+          <div>
+            <span>Alumnos</span>
+            <strong>{{ Array.isArray(solicitudes) ? solicitudes.length : (solicitudes?.data?.length || 0) }}</strong>
+            <small>Con solicitud</small>
+          </div>
+        </article>
 
-  <article class="stat">
-    <div class="stat-icon warning">
-      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 7v5l3 2" />
-      </svg>
-    </div>
-    <div>
-      <span>Pendientes</span>
-      <strong>{{ contarPorEstado('PENDIENTE') }}</strong>
-      <small>Sin revisar</small>
-    </div>
-  </article>
+        <article class="stat">
+          <div class="stat-icon warning">
+            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+          </div>
+          <div>
+            <span>Pendientes</span>
+            <strong>{{ contarPorEstado('PENDIENTE') }}</strong>
+            <small>Sin revisar</small>
+          </div>
+        </article>
 
-  <article class="stat">
-    <div class="stat-icon info">
-      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M4 19V5" />
-        <path d="M4 19h16" />
-        <path d="M8 15l3-4 3 2 4-6" />
-      </svg>
-    </div>
-    <div>
-      <span>Seguimiento</span>
-      <strong>{{ contarPorEstado('EN_REVISION') }}</strong>
-      <small>En revisión</small>
-    </div>
-  </article>
+        <article class="stat">
+          <div class="stat-icon info">
+            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 19V5" />
+              <path d="M4 19h16" />
+              <path d="M8 15l3-4 3 2 4-6" />
+            </svg>
+          </div>
+          <div>
+            <span>Seguimiento</span>
+            <strong>{{ contarPorEstado('EN_REVISION') }}</strong>
+            <small>En revisión</small>
+          </div>
+        </article>
 
-  <article class="stat">
-    <div class="stat-icon success">
-      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M5 12l4 4L19 6" />
-      </svg>
-    </div>
-    <div>
-      <span>Aceptadas</span>
-      <strong>{{ contarPorEstado('ACEPTADA') }}</strong>
-      <small>Dictaminadas</small>
-    </div>
-  </article>
+        <article class="stat">
+          <div class="stat-icon success">
+            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12l4 4L19 6" />
+            </svg>
+          </div>
+          <div>
+            <span>Aceptadas</span>
+            <strong>{{ contarPorEstado('ACEPTADA') }}</strong>
+            <small>Dictaminadas</small>
+          </div>
+        </article>
 
-  <article class="stat">
-    <div class="stat-icon danger">
-      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M6 6l12 12" />
-        <path d="M18 6L6 18" />
-      </svg>
-    </div>
-    <div>
-      <span>Rechazadas</span>
-      <strong>{{ contarPorEstado('RECHAZADA') }}</strong>
-      <small>No aprobadas</small>
-    </div>
-  </article>
-</section>
-
+        <article class="stat">
+          <div class="stat-icon danger">
+            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 6l12 12" />
+              <path d="M18 6L6 18" />
+            </svg>
+          </div>
+          <div>
+            <span>Rechazadas</span>
+            <strong>{{ contarPorEstado('RECHAZADA') }}</strong>
+            <small>No aprobadas</small>
+          </div>
+        </article>
+      </section>
 
       <!-- BANNER INFORMATIVO -->
       <section class="notice">
@@ -376,8 +411,8 @@ const cambiarEstadoSolicitud = async (id, nuevoEstado) => {
         <div class="requests-header">
           <div>
             <span class="eyebrow">SEGUIMIENTO</span>
-            <h2>Solicitudes de alumnos</h2>
-            <p>{{ Array.isArray(solicitudesFiltradas) ? solicitudesFiltradas.length : 0 }} resultado(s)</p>
+            <h2>{{ tabActual === 'revisadas' ? 'Solicitudes Revisadas' : 'Solicitudes de alumnos' }}</h2>
+            <p>{{ solicitudesSegunTab.length }} resultado(s)</p>
           </div>
 
           <button 
@@ -402,12 +437,13 @@ const cambiarEstadoSolicitud = async (id, nuevoEstado) => {
           />
         </div>
 
-        <!-- Componente Tabla -->
+        <!-- Componente Tabla Reutilizable -->
         <SolicitudesTabla 
-          :solicitudes="solicitudesFiltradas"
-          :cargando="cargando"
-          @seleccionar="abrirModal"
-        />
+        :solicitudes="solicitudesSegunTab"
+        :cargando="cargando"
+        :tab-actual="tabActual"
+        @seleccionar="abrirModal"
+        />  
       </section>
     </main>
 
@@ -415,8 +451,9 @@ const cambiarEstadoSolicitud = async (id, nuevoEstado) => {
     <SolicitudDetalleModal
   v-if="solicitudSeleccionada"
   :solicitud="solicitudSeleccionada"
+  :solo-lectura="tabActual === 'revisadas'"
   @cerrar="solicitudSeleccionada = null"
-  @actualizado="cargarSolicitudes"
+  @actualizar-estado="obtenerSolicitudes"
 />
 
     <!-- MODAL CERRAR SESIÓN -->
@@ -548,6 +585,7 @@ const cambiarEstadoSolicitud = async (id, nuevoEstado) => {
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 .navigation-button:hover,
