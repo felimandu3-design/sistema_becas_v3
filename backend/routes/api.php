@@ -22,7 +22,7 @@ use App\Http\Controllers\ResultadosController;
 use App\Http\Controllers\RolAsignacionController;
 use App\Http\Controllers\SolicitudBecaController;
 use App\Http\Controllers\SuperAdminController;
-use App\Http\Controllers\StaffController; // Agregado para evitar error de clase no encontrada
+use App\Http\Controllers\StaffController;
 
 /*
 |--------------------------------------------------------------------------

@@ -15,9 +15,11 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\BecariosExport;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ConvocatoriaController extends Controller
 {
+
     // LISTAR CONVOCATORIAS
     public function index() {
         $convocatorias = Convocatoria::with('periodo')->orderByDesc('id')->get();
@@ -47,6 +49,7 @@ class ConvocatoriaController extends Controller
     public function getActiva() { return $this->obtenerVigente(); }
     public function actual() { return $this->obtenerVigente(); }
 
+    
     // CREAR CONVOCATORIA
     public function store(Request $request) {
         $validated = $request->validate([
@@ -351,51 +354,65 @@ class ConvocatoriaController extends Controller
         Notification::send($alumnos, new ConvocatoriaCerradaNotification($convocatoria));
     }
     // SUPERADMIN: DESCARGAR EXCEL DE BECARIOS
-    public function exportarExcelPadron($id)
+   public function exportarExcelPadron(Request $request, $id)
 {
-    // 1. Obtener los registros
-    $solicitudes = Solicitud::where('convocatoria_id', $id)
-        ->with(['usuario'])
-        ->get();
+    // 1. Iniciar consulta filtrando por la convocatoria actual
+    $query = Solicitud::where('convocatoria_id', $id);
 
-    // 2. Crear hoja de cálculo
+    // Cargar solo la relación directa del usuario si existe
+    if (method_exists(Solicitud::class, 'usuario')) {
+        $query->with('usuario');
+    } elseif (method_exists(Solicitud::class, 'user')) {
+        $query->with('user');
+    }
+
+    // Filtro por Estado / Estatus
+    if ($request->filled('estado') && $request->estado !== 'todos') {
+        $query->where('estado', $request->estado);
+    }
+
+    // Filtro por Búsqueda (Texto libre)
+    if ($request->filled('buscar')) {
+        $term = '%' . $request->buscar . '%';
+        $query->where(function ($q) use ($term) {
+            $q->where('folio', 'like', $term);
+        });
+    }
+
+    $solicitudes = $query->get();
+
+    // 2. Generar el documento Excel
     $spreadsheet = new Spreadsheet();
     $sheet = $spreadsheet->getActiveSheet();
+    $sheet->setTitle('Padrón de Solicitudes');
 
-    // 3. Encabezados (Solo Matrícula, Alumno y Descuento)
-    $sheet->setCellValue('A1', 'Matrícula');
+    // Encabezados
+    $sheet->setCellValue('A1', 'Folio');
     $sheet->setCellValue('B1', 'Alumno');
-    $sheet->setCellValue('C1', 'Descuento');
+    $sheet->setCellValue('C1', 'Matrícula');
+    $sheet->setCellValue('D1', 'Estado');
 
-    // Estilo para encabezados (Negrita)
-    $sheet->getStyle('A1:C1')->getFont()->setBold(true);
-
-    // 4. Llenar filas de datos
+    // Llenado seguro sin romper la ejecución por datos nulos
     $row = 2;
-    foreach ($solicitudes as $s) {
-        $alumno = $s->usuario ?? $s->alumno ?? null;
-        $descuento = $s->porcentaje_beca ? round($s->porcentaje_beca) . '%' : 'N/A';
+    foreach ($solicitudes as $sol) {
+        // Soporte para relación $sol->usuario o $sol->user
+        $usr = $sol->usuario ?? $sol->user ?? null;
 
-        $sheet->setCellValue('A' . $row, $alumno?->matricula ?? '—');
-        $sheet->setCellValue('B' . $row, $alumno?->name ?? 'Sin nombre');
-        $sheet->setCellValue('C' . $row, $descuento);
-        
+        $sheet->setCellValue('A' . $row, $sol->folio ?? 'N/A');
+        $sheet->setCellValue('B' . $row, $usr->name ?? $usr->nombre ?? 'Sin nombre');
+        $sheet->setCellValue('C' . $row, $usr->matricula ?? 'Sin matrícula');
+        $sheet->setCellValue('D' . $row, $sol->estado ?? $sol->estatus ?? 'Pendiente');
         $row++;
     }
 
-    // Auto-ajustar ancho de las 3 columnas
-    foreach (range('A', 'C') as $col) {
-        $sheet->getColumnDimension($col)->setAutoSize(true);
-    }
-
-    // 5. Descargar archivo
-    $fileName = "padron_becarios_convocatoria_{$id}.xlsx";
-    $writer = new Xlsx($spreadsheet);
-
-    return response()->streamDownload(function () use ($writer) {
+    // 3. Descarga
+    return new StreamedResponse(function () use ($spreadsheet) {
+        $writer = new Xlsx($spreadsheet);
         $writer->save('php://output');
-    }, $fileName, [
+    }, 200, [
         'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition' => 'attachment; filename="padron_solicitudes.xlsx"',
+        'Cache-Control' => 'max-age=0',
     ]);
 }
 }
