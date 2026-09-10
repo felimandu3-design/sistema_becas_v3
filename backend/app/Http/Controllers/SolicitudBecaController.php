@@ -25,7 +25,7 @@ class SolicitudBecaController extends Controller
         return response()->json(['data' => $solicitudes]);
     }
 
-    // SOLICITUDES POR CARRERA ASIGNADA (Admin / Profesor / Jefe)
+    // SOLICITUDES POR CARRERA O GRUPO ASIGNADO (Admin / Profesor / Jefe)
     public function porCarreraAsignada(Request $request)
     {
         try {
@@ -42,14 +42,13 @@ class SolicitudBecaController extends Controller
                 $carrerasIds[] = $usuario->carrera_id;
             }
 
-            // Si existen carreras asignadas en tabla pivote
             if (method_exists($usuario, 'carrerasAsignadas') && $usuario->carrerasAsignadas()->exists()) {
                 $carrerasIds = array_merge($carrerasIds, $usuario->carrerasAsignadas()->pluck('carrera_id')->toArray());
             }
 
             $carrerasIds = array_unique(array_filter($carrerasIds));
 
-            // 2. Consultar solicitudes cruzando la carrera por solicitud, por usuario y por grupo
+            // 2. Base de la consulta con sus relaciones
             $query = \App\Models\Solicitud::with([
                 'usuario.carrera',
                 'usuario.grupoRelacion.carrera',
@@ -59,15 +58,22 @@ class SolicitudBecaController extends Controller
                 'documentos'
             ]);
 
-            if (!empty($carrerasIds)) {
+            // 3. FILTRADO SEGÚN ROL:
+            if ($usuario->role === 'profesor' && $usuario->grupo_id) {
+                $query->where(function ($q) use ($usuario) {
+                    $q->where('grupo_id', $usuario->grupo_id)
+                      ->orWhereHas('usuario', function ($qUser) use ($usuario) {
+                          $qUser->where('grupo_id', $usuario->grupo_id);
+                      });
+                });
+            }
+            // CASO B: Si es Jefe de Carrera / Admin -> Filtra por la CARRERA completa
+            else if (!empty($carrerasIds)) {
                 $query->where(function ($q) use ($carrerasIds) {
-                    // Carrera directa en la solicitud
                     $q->whereIn('carrera_id', $carrerasIds)
-                      // O carrera del alumno que creó la solicitud
                       ->orWhereHas('usuario', function ($qUser) use ($carrerasIds) {
                           $qUser->whereIn('carrera_id', $carrerasIds);
                       })
-                      // O carrera a través del grupo del alumno
                       ->orWhereHas('usuario.grupoRelacion', function ($qGrupo) use ($carrerasIds) {
                           $qGrupo->whereIn('carrera_id', $carrerasIds);
                       });
@@ -135,9 +141,9 @@ class SolicitudBecaController extends Controller
         }
 
         $validated = $request->validate([
-            'estado' => 'required|string|in:ACEPTADA,RECHAZADA,INCOMPLETA,DOCUMENTACION_INCOMPLETA,EN_REVISION',
-            'porcentaje_beca' => 'nullable|numeric|between:0,100',
-            'comentario_revision' => 'nullable|string|max:2000',
+        'estado' => 'required|string|in:ACEPTADA,RECHAZADA,INCOMPLETA,DOCUMENTACION_INCOMPLETA,EN_REVISION',
+        'porcentaje_beca' => 'nullable|integer|in:25,50,75',
+        'comentario_revision' => 'nullable|string|max:2000',
         ]);
 
         if ($validated['estado'] === 'ACEPTADA' && empty($validated['porcentaje_beca'])) {
@@ -162,30 +168,38 @@ class SolicitudBecaController extends Controller
 
     // VERIFICAR PERMISO PRIVADO
     private function puedeRevisar(Request $request, Solicitud $solicitud): bool {
-        $usuario = $request->user();
-        
-        if (!$usuario) return false;
-        if ($usuario->role === 'superadmin') return true;
-        if (!in_array($usuario->role, ['admin', 'profesor', 'jefe', 'jefe_carrera'], true)) return false; 
+    $usuario = $request->user();
+    
+    if (!$usuario) return false;
+    
+    if ($usuario->role === 'superadmin') return true;
+    
+    if (!in_array($usuario->role, ['admin', 'profesor', 'jefe', 'jefe_carrera', 'tutor'], true)) return false; 
 
-        // 1. Buscamos en la tabla pivot
-        $carreras = DB::table('asignaciones_carrera')
-            ->where('user_id', $usuario->id)
-            ->pluck('carrera_id')
-            ->map(fn ($id) => (int) $id);
-
-        // 2. Agregamos su carrera principal
-        if ($usuario->carrera_id) {
-            $carreras->push((int) $usuario->carrera_id);
+    if (in_array($usuario->role, ['profesor', 'tutor']) && $usuario->grupo_id) {
+        $grupoSolicitud = $solicitud->grupo_id ?? $solicitud->usuario?->grupo_id;
+        if ((int)$usuario->grupo_id === (int)$grupoSolicitud) {
+            return true;
         }
-
-        // 3. Verificamos si la carrera de la solicitud está en su lista
-        return $carreras->contains((int) $solicitud->carrera_id);
     }
 
+    $carreras = DB::table('asignaciones_carrera')
+        ->where('user_id', $usuario->id)
+        ->pluck('carrera_id')
+        ->map(fn ($id) => (int) $id);
+
+    if ($usuario->carrera_id) {
+        $carreras->push((int) $usuario->carrera_id);
+    }
+
+    $carreraSolicitud = $solicitud->carrera_id ?? $solicitud->usuario?->carrera_id;
+
+    return $carreras->contains((int) $carreraSolicitud);
+}
+
     // ALUMNO: MI SOLICITUD ACTIVA
-    public function miSolicitudActiva(Request $request) {
-        $solicitud = Solicitud::with(['convocatoria', 'documentos'])
+public function miSolicitudActiva(Request $request) {
+        $solicitud = Solicitud::with(['convocatoria', 'documentos','grupoRelacion','carrera'])
             ->where('user_id', $request->user()->id)
             ->orderByDesc('created_at')->first();
 
@@ -202,6 +216,7 @@ class SolicitudBecaController extends Controller
         
         return response()->json($solicitud, 200);
     }
+
 
     // ALUMNO: HISTORIAL DE SOLICITUDES
     public function misSolicitudes(Request $request) {

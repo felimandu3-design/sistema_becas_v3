@@ -68,7 +68,7 @@ Route::middleware('auth:sanctum')->group(function () {
         if (!$usuario) return response()->json(['status' => 'error', 'message' => 'Usuario no autenticado.'], 401);
         
         try { 
-            $usuario->load(['grupo.carrera', 'carrera', 'grupoRelacion.carrera', 'carrerasAsignadas']); 
+            $usuario->load(['grupo.carrera','grupos.carrera', 'carrera', 'grupoRelacion.carrera', 'carrerasAsignadas']); 
         } catch (\Throwable $e) {}
 
         return response()->json([
@@ -100,7 +100,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('profesor')->middleware('role:profesor')->group(function () {
         Route::get('/solicitudes', [SolicitudBecaController::class, 'porCarreraAsignada']);
         Route::patch('/solicitudes/{solicitud}/estatus', [SolicitudBecaController::class, 'actualizarEstado']);
-        Route::patch('/solicitudes/{solicitud}/dictamen', [SolicitudBecaController::class, 'dictaminar']);
+        Route::patch('/solicitudes/{solicitud}/estatus', [SolicitudBecaController::class, 'dictaminar']);
         Route::post('/tutor/solicitudes/{id}/confirmar', [SolicitudBecaController::class, 'confirmarSolicitud']);
         Route::patch('/documentos/{documento}/observar', [DocumentoController::class, 'solicitarCorreccion']);
     });
@@ -153,12 +153,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/convocatorias/{convocatoria}', [ConvocatoriaController::class, 'destroy']);
         Route::post('/convocatorias/{convocatoria}/archivo', [ConvocatoriaController::class, 'reemplazarArchivo']);
         Route::delete('/convocatorias/{convocatoria}/archivo', [ConvocatoriaController::class, 'eliminarArchivo']);
-        
-        // Cambio de estados de la convocatoria
+    
         Route::patch('/convocatorias/{convocatoria}/publicar', [ConvocatoriaController::class, 'publicar']);
         Route::patch('/convocatorias/{convocatoria}/cerrar', [ConvocatoriaController::class, 'cerrar']);
-        
-        // NUEVA RUTA: Botón de publicar resultados
         Route::post('/convocatorias/{id}/publicar-resultados', [ConvocatoriaController::class, 'publicarResultados']);
         
         Route::post('/convocatorias/{convocatoria}/enviar-resultados', [ResultadosController::class, 'enviar']);

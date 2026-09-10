@@ -38,11 +38,7 @@ class RolAsignacionController extends Controller
         ]);
     }
 
-/*
-|--------------------------------------------------------------------------
-| CREAR PERSONAL
-|--------------------------------------------------------------------------
-*/
+
 /*
 |--------------------------------------------------------------------------
 | CREAR PERSONAL
@@ -96,25 +92,32 @@ public function actualizarStaff(Request $request, User $usuario) {
         'name' => ['required', 'string', 'max:255'],
         'email' => ['required', 'email', 'max:255', 'unique:users,email,' . $usuario->id],
         'role' => ['required', 'in:admin,profesor'],
-
         'carrera_id' => ['nullable', 'integer', 'exists:carreras,id'],
         'grupo_id' => ['nullable', 'integer', 'exists:grupos,id'],
     ]);
 
     DB::transaction(function () use ($usuario, $data) {
+        $nuevoGrupoId = $data['role'] === 'profesor' ? ($data['grupo_id'] ?? null) : null;
+
+        \App\Models\Grupo::where('tutor_id', $usuario->id)->update(['tutor_id' => null]);
+
         $usuario->update([
             'name' => $data['name'],
             'email' => $data['email'],
             'role' => $data['role'],
-            'carrera_id' => $data['role'] === 'admin' ? ($data['carrera_id'] ?? null) : null,
-            'grupo_id' => $data['role'] === 'profesor' ? ($data['grupo_id'] ?? null) : null,
+            'carrera_id' => $data['carrera_id'] ?? $usuario->carrera_id,
+            'grupo_id' => $nuevoGrupoId,
         ]);
+
+        if ($nuevoGrupoId) {
+            \App\Models\Grupo::where('id', $nuevoGrupoId)->update(['tutor_id' => $usuario->id]);
+        }
     });
 
     return response()->json([
         'status' => 'success',
         'message' => 'Personal actualizado correctamente.',
-        'data' => $usuario->fresh()->load(['carrera', 'gruposAsignados']),
+        'data' => $usuario->fresh()->load(['carrera', 'grupoRelacion']),
     ]);
 }
 

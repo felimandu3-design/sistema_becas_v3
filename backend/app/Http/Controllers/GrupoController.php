@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Grupo;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class GrupoController extends Controller
@@ -94,29 +95,35 @@ class GrupoController extends Controller
         ]);
     }
 
-    public function update(
-        Request $request,
-        Grupo $grupo
-    ) {
-        $data = $this->validar(
-            $request,
-            $grupo
-        );
+public function update(Request $request, Grupo $grupo) 
+{
+    $data = $this->validar($request, $grupo);
+
+    DB::transaction(function () use ($grupo, $data) {
+        $tutorAnteriorId = $grupo->tutor_id;
 
         $grupo->update($data);
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Grupo actualizado.',
-            'data' => $grupo
-                ->fresh()
-                ->load([
-                    'carrera',
-                    'periodo',
-                    'tutor'
-                ])
-        ]);
-    }
+        if (array_key_exists('tutor_id', $data) && $tutorAnteriorId !== $data['tutor_id']) {
+            if ($tutorAnteriorId) {
+                User::where('id', $tutorAnteriorId)->update(['grupo_id' => null]);
+            }
+
+            if ($data['tutor_id']) {
+                User::where('id', $data['tutor_id'])->update([
+                    'grupo_id' => $grupo->id,
+                    'carrera_id' => $grupo->carrera_id
+                ]);
+            }
+        }
+    });
+
+    return response()->json([
+        'status' => 'success',
+        'message' => 'Grupo actualizado.',
+        'data' => $grupo->fresh()->load(['carrera', 'periodo', 'tutor'])
+    ]);
+}
 
     public function destroy(Grupo $grupo)
     {
