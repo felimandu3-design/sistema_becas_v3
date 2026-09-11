@@ -133,7 +133,7 @@ function modalidadLabel(valor) {
     </div>
 
     <!-- VISTA CUANDO YA HAY SOLICITUD -->
-    <article v-if="solicitudActiva" class="panel request-detail">
+    <article v-if="solicitudActiva && solicitudActiva.id" class="panel request-detail">
       <div class="panel-heading">
         <div>
           <span class="eyebrow">{{ folio(solicitudActiva) }}</span>
@@ -147,7 +147,13 @@ function modalidadLabel(valor) {
       <div class="request-summary large">
         <div><span>Modalidad</span><strong>{{ modalidadLabel(solicitudActiva.modalidad) }}</strong></div>
         <div><span>Carrera</span><strong>{{ solicitudActiva.carrera?.nombre || usuario?.carrera?.nombre || '—' }}</strong></div>
-        <div><span>Grupo</span><strong>{{ solicitudActiva.grupo?.nombre || solicitudActiva.grupo || usuario?.grupo?.nombre || usuario?.grupo || '—' }}</strong></div>
+        <div><span>Grupo</span><strong>{{solicitudActiva.grupoRelacion?.nombre || solicitudActiva.grupo_relacion?.nombre || 
+      solicitudActiva.grupo?.nombre || 
+      usuario?.grupoRelacion?.nombre || 
+      usuario?.grupo_relacion?.nombre || 
+      usuario?.grupo?.nombre || 
+      (typeof solicitudActiva.grupo === 'string' ? solicitudActiva.grupo : '—') 
+    }}</strong></div>
         <div><span>Registrada</span><strong>{{ fecha(solicitudActiva.created_at) }}</strong></div>
       </div>
 
@@ -190,7 +196,7 @@ function modalidadLabel(valor) {
         <div class="conv-mini">
           <span>Convocatoria</span>
           <strong>{{ convocatoria.nombre || convocatoria.titulo }}</strong>
-          <small>{{ fecha(convocatoria.fecha_inicio) }} — {{ fecha(convocatoria.fecha_cierre) }}</small>
+          <small>{{ fecha(convocatoria.fecha_inicio) }} — {{ fecha(convocatoria.fecha_fin) }}</small>
         </div>
 
         <label class="field full">

@@ -63,9 +63,10 @@ const restablecerContrasena = async () => {
   cargandoRecuperacion.value = true;
 
   try {
+    // ✅ CAMBIA 'codigo' POR 'code' AQUÍ:
     const { data } = await api.post('/reset-password', {
       email: correoRecuperacion.value.trim(),
-      codigo: codigoRecuperacion.value.trim().toUpperCase(),
+      code: codigoRecuperacion.value.trim().toUpperCase(), 
       password: passwordNueva.value,
       password_confirmation: passwordNuevaConfirmar.value
     });

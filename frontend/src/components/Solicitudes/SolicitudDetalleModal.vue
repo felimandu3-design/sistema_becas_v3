@@ -34,7 +34,7 @@ const mostrandoOpcionesAceptar = ref(false)
 watch(() => props.solicitud, (nuevaVal) => {
   if (nuevaVal) {
     estadoSeleccionado.value = nuevaVal.estatus || nuevaVal.estado || 'PENDIENTE'
-    porcentajeDescuentoSeleccionado.value = nuevaVal.porcentaje_descuento || 50
+    porcentajeDescuentoSeleccionado.value = nuevaVal.porcentaje_beca || nuevaVal.porcentaje_descuento || 25
     mostrandoOpcionesAceptar.value = false
   }
 }, { immediate: true })
@@ -80,22 +80,22 @@ const confirmarYGuardarCambios = async () => {
     const estadoFinal = estadoSeleccionado.value.toUpperCase()
     const porcentajeFinal = (estadoFinal === 'ACEPTADA') ? porcentajeDescuentoSeleccionado.value : null
 
+    // Asegurar enviar porcentaje_beca para cumplir con la validación de Laravel
     const payload = {
       estado: estadoFinal,
-      estatus: estadoFinal,
-      porcentaje_descuento: porcentajeFinal
+      porcentaje_beca: porcentajeFinal, // <-- Cambiado de porcentaje_descuento a porcentaje_beca
+      comentario_revision: null
     }
 
     await axios.patch(`http://127.0.0.1:8000/api/profesor/solicitudes/${props.solicitud.id}/estatus`, payload, config)
 
     props.solicitud.estado = estadoFinal
-    props.solicitud.estatus = estadoFinal
-    props.solicitud.porcentaje_descuento = porcentajeFinal
+    props.solicitud.porcentaje_beca = porcentajeFinal
 
     emit('actualizar-estado', { 
       id: props.solicitud.id, 
       estado: estadoFinal, 
-      porcentaje_descuento: porcentajeFinal 
+      porcentaje_beca: porcentajeFinal 
     })
 
     mostrarNotificacion('Información actualizada correctamente.')

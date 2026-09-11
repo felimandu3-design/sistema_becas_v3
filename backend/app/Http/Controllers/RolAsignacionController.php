@@ -189,10 +189,6 @@ public function resetPassword(Request $request) {
                     ->carrerasAsignadas()
                     ->detach();
 
-                /*
-                | Si es tutor de grupos,
-                | dejamos esos grupos sin tutor.
-                */
                 $usuario
                     ->gruposTutor()
                     ->update([

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import api from '../../api/axios'
 
 const props = defineProps({
@@ -19,6 +19,39 @@ const alumnoForm = ref({})
 
 function carreraPorId(id) { return props.carreras.find(c => String(c.id) === String(id)) }
 function grupoPorId(id) { return props.grupos.find(g => String(g.id) === String(id)) }
+
+// Grupos filtrados según la carrera seleccionada en los filtros
+const gruposFiltrados = computed(() => {
+  if (filtroCarrera.value === 'todos') {
+    return props.grupos
+  }
+  return props.grupos.filter(g => String(g.carrera_id) === String(filtroCarrera.value))
+})
+
+// Reiniciar el filtro de grupo si la carrera cambia y el grupo ya no pertenece a ella
+watch(filtroCarrera, (nuevaCarrera) => {
+  if (nuevaCarrera === 'todos') return
+  
+  const grupoValido = gruposFiltrados.value.some(g => String(g.id) === String(filtroGrupo.value))
+  if (!grupoValido) {
+    filtroGrupo.value = 'todos'
+  }
+})
+
+// Grupos disponibles dentro del modal de edición
+const gruposEdicion = computed(() => {
+  if (!alumnoForm.value.carrera_id) return props.grupos
+  return props.grupos.filter(g => String(g.carrera_id) === String(alumnoForm.value.carrera_id))
+})
+
+// Si el usuario cambia la carrera en el modal, resetea el grupo si ya no coincide
+watch(() => alumnoForm.value.carrera_id, (nuevaCarreraId) => {
+  if (!nuevaCarreraId) return
+  const esGrupoValido = gruposEdicion.value.some(g => String(g.id) === String(alumnoForm.value.grupo_id))
+  if (!esGrupoValido) {
+    alumnoForm.value.grupo_id = ''
+  }
+})
 
 const alumnosFiltrados = computed(() => {
   const q = busqueda.value.trim().toLowerCase()
@@ -75,7 +108,7 @@ async function guardarAlumno() {
       </select>
       <select v-model="filtroGrupo">
         <option value="todos">Todos los grupos</option>
-        <option v-for="g in props.grupos" :key="g.id" :value="g.id">{{ g.nombre }}</option>
+        <option v-for="g in gruposFiltrados" :key="g.id" :value="g.id">{{ g.nombre }}</option>
       </select>
     </div>
 
@@ -123,7 +156,7 @@ async function guardarAlumno() {
         <label>Grupo 
           <select v-model="alumnoForm.grupo_id">
             <option value="">Sin grupo</option>
-            <option v-for="g in props.grupos.filter(g => !alumnoForm.carrera_id || String(g.carrera_id) === String(alumnoForm.carrera_id))" :key="g.id" :value="g.id">{{ g.nombre }}</option>
+            <option v-for="g in gruposEdicion" :key="g.id" :value="g.id">{{ g.nombre }}</option>
           </select>
         </label>
         <button class="primary submit">Guardar alumno</button>

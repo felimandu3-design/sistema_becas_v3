@@ -58,7 +58,7 @@ function obtenerDescuento(solicitud) {
   const valor = solicitud.porcentaje_beca ?? solicitud.descuento ?? null
 
   if (valor === null || valor === undefined || valor === '' || valor === 'N/A') {
-    return estatus === 'ACEPTADA' ? '50%' : 'N/A'
+    return 'N/A'
   }
 
   const strValor = valor.toString().trim()

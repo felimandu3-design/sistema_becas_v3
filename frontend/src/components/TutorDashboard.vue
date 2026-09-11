@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { useSolicitudes } from '../composables/useSolicitudes.js'
 
@@ -45,7 +45,6 @@ const cerrarModal = () => { solicitudSeleccionada.value = null }
 |--------------------------------------------------------------------------
 */
 const solicitudesSegunTab = computed(() => {
-  // Extraer el array real soportando respuestas paginadas de Laravel
   let lista = []
   if (Array.isArray(solicitudes.value)) {
     lista = solicitudes.value
@@ -56,21 +55,18 @@ const solicitudesSegunTab = computed(() => {
   if (!lista.length) return []
 
   return lista.filter(s => {
-    // Extraer y normalizar estado
     const estadoRaw = s.estado || s.estatus || s.status || s.estado_solicitud || ''
     const val = estadoRaw.toString().toLowerCase().trim()
 
-    // Consideramos "pendiente" los estados iniciales
+    // Consideramos pendiente los estados iniciales
     const esPendiente = val === 'pendiente' || val === 'sin_revisar' || val === '0' || val === ''
 
-    // 1. Filtrado por Pestaña Activa
     if (tabActual.value === 'resumen') {
       if (!esPendiente) return false
     } else if (tabActual.value === 'revisadas') {
       if (esPendiente) return false
     }
 
-    // 2. Filtro por Select (Soporta 'todos', 'TODOS', null, '' o espacios)
     if (filtroEstado.value) {
       const filtro = filtroEstado.value.toString().toLowerCase().trim()
       if (filtro !== 'todos' && filtro !== '' && filtro !== 'todos los estados') {
@@ -78,7 +74,6 @@ const solicitudesSegunTab = computed(() => {
       }
     }
 
-    // 3. Filtro por Búsqueda de Texto
     if (busqueda.value && busqueda.value.trim() !== '') {
       const q = busqueda.value.toLowerCase().trim()
       const nombre = (s.usuario?.name || s.alumno?.nombre || s.nombre || '').toLowerCase()
@@ -134,45 +129,33 @@ const totalAlumnosConSolicitud = computed(() => {
   return Array.isArray(solicitudes.value) ? solicitudes.value.length : 0
 })
 
-// Obtener el grupo directamente del objeto usuario prop
+// Obtener el grupo
 const grupoAsignado = computed(() => {
-  if (props.usuario?.grupo?.nombre) return props.usuario.grupo.nombre
-  if (props.usuario?.grupo?.clave) return props.usuario.grupo.clave
-  if (typeof props.usuario?.grupo === 'string' && props.usuario.grupo.trim() !== '') {
-    return props.usuario.grupo
+  const u = props.usuario
+
+  // 1. Buscar dentro del objeto de usuario en props (todas las variaciones posibles)
+  if (u?.grupo_relacion?.nombre) return u.grupo_relacion.nombre
+  if (u?.grupoRelacion?.nombre) return u.grupoRelacion.nombre
+  if (u?.grupo?.nombre) return u.grupo.nombre
+  if (u?.grupo?.clave) return u.grupo.clave
+  if (typeof u?.grupo === 'string' && u.grupo.trim() !== '') return u.grupo
+
+  if (Array.isArray(u?.grupos) && u.grupos.length > 0) {
+    const g = u.grupos[0]
+    return g.nombre || g.clave || g.nombre_grupo || 'Grupo asignado'
   }
 
-  if (solicitudes.value && solicitudes.value.length > 0) {
-    const primeraSol = solicitudes.value[0]
-    const grupoEncontrado = primeraSol.usuario?.grupo || primeraSol.grupo || primeraSol.alumno?.grupo
-    if (grupoEncontrado) return grupoEncontrado
-  }
-
-  return 'Sin asignación'
-})
-
-// Carrera del grupo asignado
-const carreraAsignada = computed(() => {
-  const u = props.usuario?.user || props.usuario
-
-  if (u?.carrera?.nombre) return u.carrera.nombre
-  if (u?.grupo?.carrera?.nombre) return u.grupo.carrera.nombre
-  if (u?.grupo_relacion?.carrera?.nombre) return u.grupo_relacion.carrera.nombre
-
+  // 2. Si el objeto usuario viene sin grupo, inferirlo a través de las solicitudes cargadas
   const lista = Array.isArray(solicitudes.value) 
     ? solicitudes.value 
-    : (solicitudes.value?.data || [])
+    : solicitudes.value?.data || []
 
   if (lista.length > 0) {
     const primeraSol = lista[0]
-    return (
-      primeraSol.carrera?.nombre ||
-      primeraSol.usuario?.carrera?.nombre ||
-      primeraSol.usuario?.grupo_relacion?.carrera?.nombre ||
-      primeraSol.grupo_relacion?.carrera?.nombre ||
-      primeraSol.alumno?.carrera?.nombre ||
-      'Sin asignación'
-    )
+    const g = primeraSol.usuario?.grupo_relacion || primeraSol.usuario?.grupoRelacion || primeraSol.usuario?.grupo || primeraSol.grupo
+    if (typeof g === 'string') return g
+    if (g?.nombre) return g.nombre
+    if (g?.clave) return g.clave
   }
 
   return 'Sin asignación'
@@ -306,10 +289,6 @@ const cambiarEstadoSolicitud = async (id, nuevoEstado) => {
           <div class="career-box">
             <span>GRUPO ASIGNADO</span>
             <strong class="group-highlight">{{ grupoAsignado }}</strong>
-          </div>
-          <div class="career-box">
-            <span>CARRERA</span>
-            <strong>{{ carreraAsignada }}</strong>
           </div>
         </div>
       </section>

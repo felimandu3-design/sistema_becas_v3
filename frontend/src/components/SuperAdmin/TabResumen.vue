@@ -60,8 +60,6 @@ const resumen = computed(() => {
   return {
     solicitudes: lista.length,
     pendientes: contar('PENDIENTE'),
-    revision: contar('EN_REVISION'),
-    incompletas: contar('DOCUMENTACION_INCOMPLETA'),
     aceptadas: contar('ACEPTADA'),
     rechazadas: contar('RECHAZADA'),
     alumnos: props.alumnos.length || props.statsApi.alumnos || 0,
@@ -85,7 +83,7 @@ const chartCarreras = computed(() => {
 })
 
 const chartEstados = computed(() => ({
-  labels: ['Pendientes', 'En revisión', 'Docs. incompletos', 'Aceptadas', 'Rechazadas'],
+  labels: ['Pendientes', 'Aceptadas', 'Rechazadas'],
   datasets: [{ data: [resumen.value.pendientes, resumen.value.revision, resumen.value.incompletas, resumen.value.aceptadas, resumen.value.rechazadas], backgroundColor: ['#d99a25', '#3b82b6', '#7754a4', '#147a4a', '#8e2843'], borderWidth: 0 }]
 }))
 
@@ -125,7 +123,6 @@ const opcionesDona = { responsive: true, maintainAspectRatio: false, cutout: '65
   <div class="kpis">
     <article><span>Solicitudes</span><strong>{{ resumen.solicitudes }}</strong><small>Total filtrado</small></article>
     <article class="amber"><span>Pendientes</span><strong>{{ resumen.pendientes }}</strong><small>Requieren atención</small></article>
-    <article class="blue"><span>En revisión</span><strong>{{ resumen.revision }}</strong><small>En proceso</small></article>
     <article class="green"><span>Aceptadas</span><strong>{{ resumen.aceptadas }}</strong><small>Aprobadas</small></article>
     <article class="burgundy"><span>Rechazadas</span><strong>{{ resumen.rechazadas }}</strong><small>No aprobadas</small></article>
   </div>

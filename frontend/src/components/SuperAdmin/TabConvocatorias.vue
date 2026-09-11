@@ -124,13 +124,14 @@ async function guardarConvocatoria() {
 async function accionConvocatoria(c, accion) {
   try {
     if (accion === 'eliminar') {
-      if (!confirm(`¿Eliminar "${c.nombre}"?`)) return
       await api.delete(`/master/convocatorias/${c.id}`)
+      emit('actualizar')
+      emit('toast', `Convocatoria "${c.nombre}" eliminada correctamente.`, 'ok')
     } else {
       await api.patch(`/master/convocatorias/${c.id}/${accion}`)
+      emit('actualizar')
+      emit('toast', 'Convocatoria actualizada.', 'ok')
     }
-    emit('actualizar')
-    emit('toast', 'Convocatoria actualizada.', 'ok')
   } catch (e) {
     emit('toast', e.response?.data?.message || 'No fue posible realizar la operación.', 'error')
   }
@@ -167,7 +168,7 @@ async function accionConvocatoria(c, accion) {
           >
             <span v-if="props.enviando">Enviando...</span>
             <span v-else-if="c.resultados_enviados_at">✅ Respuestas Enviadas</span>
-            <span v-else>📢 Publicar Resultados</span>
+            <span v-else>Publicar Resultados</span>
           </button>
 
           <!-- ACCIONES ESTÁNDAR -->

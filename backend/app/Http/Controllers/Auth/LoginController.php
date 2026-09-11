@@ -72,14 +72,12 @@ class LoginController extends Controller
         }
 
 
-        if (
-            !$user->email_verified_at
-        ) {
+        $rolesExentos = ['superadmin', 'admin', 'jefe', 'jefe_carrera', 'profesor', 'tutor'];
+
+        if (!in_array($user->role, $rolesExentos, true) && !$user->email_verified_at) {
             return response()->json([
                 'status' => 'error',
-
-                'message' =>
-                    'Debes verificar tu correo antes de iniciar sesión.',
+                'message' => 'Debes verificar tu correo antes de iniciar sesión.',
             ], 403);
         }
 

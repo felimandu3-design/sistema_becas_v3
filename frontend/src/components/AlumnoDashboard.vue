@@ -101,18 +101,31 @@ const estadoActual = computed(() =>
 
 const convocatoriaAbierta = computed(() => {
   if (!convocatoria.value) return false
+
   const estado = String(convocatoria.value.estado || '').toUpperCase()
   if (estado && !['PUBLICADA', 'ACTIVA', 'ABIERTO', 'ABIERTA'].includes(estado)) return false
 
   const hoy = new Date()
-  const inicio = convocatoria.value.fecha_inicio ? new Date(convocatoria.value.fecha_inicio) : null
-  const cierre = convocatoria.value.fecha_cierre ? new Date(convocatoria.value.fecha_cierre) : null
+  
+  // Tomar fecha_inicio
+  const inicioRaw = convocatoria.value.fecha_inicio
+  const inicio = inicioRaw ? new Date(inicioRaw) : null
 
-  if (inicio && !Number.isNaN(inicio.getTime()) && hoy < inicio) return false
+  // Tomar fecha_fin
+  const cierreRaw = convocatoria.value.fecha_fin || convocatoria.value.fecha_cierre
+  const cierre = cierreRaw ? new Date(cierreRaw) : null
+
+  // Validar si la fecha actual es menor al inicio
+  if (inicio && !Number.isNaN(inicio.getTime())) {
+    inicio.setHours(0, 0, 0, 0)
+    if (hoy < inicio) return false
+  }
+
   if (cierre && !Number.isNaN(cierre.getTime())) {
     cierre.setHours(23, 59, 59, 999)
     if (hoy > cierre) return false
   }
+
   return true
 })
 
@@ -133,14 +146,25 @@ async function cargarDatos() {
   if (rConv.status === 'fulfilled') {
     convocatoria.value = unwrapObject(rConv.value.data, ['convocatoria'])
   }
+
+  // --- MANEJO DE LA SOLICITUD ACTIVA ---
   if (rActiva.status === 'fulfilled') {
-    solicitudActiva.value = unwrapObject(rActiva.value.data, ['solicitud'])
+    const dataExtraida = unwrapObject(rActiva.value.data, ['solicitud'])
+    
+    // Verificamos que contenga un ID válido de la base de datos
+    if (dataExtraida && dataExtraida.id) {
+      solicitudActiva.value = dataExtraida
+    } else {
+      solicitudActiva.value = null
+    }
   } else if (rActiva.reason?.response?.status === 404) {
     solicitudActiva.value = null
   }
+
   if (rHistorial.status === 'fulfilled') {
     solicitudes.value = unwrapArray(rHistorial.value.data)
   }
+
   if (rCarreras.status === 'fulfilled') {
     carreras.value = unwrapArray(rCarreras.value.data)
   }
@@ -151,6 +175,7 @@ async function cargarDatos() {
   } else if (fallidosReales.length) {
     errorGeneral.value = 'Algunos datos no pudieron cargarse. Puedes actualizar el panel.'
   }
+
   cargando.value = false
 }
 

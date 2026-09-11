@@ -1,6 +1,6 @@
 <script setup>
-import api from '../../api/axios';
-import { ref, watch } from 'vue'
+import api from '../../api/axios'
+import { ref, watch, computed } from 'vue'
 
 const props = defineProps({
   staff: { type: Array, default: () => [] },
@@ -29,6 +29,29 @@ const editForm = ref({
   role: 'admin',
   carrera_id: '',
   grupo_id: ''
+})
+
+// Mapeos para saber qué carrera o grupo pertenece a quién
+const carreraOcupadaPor = computed(() => {
+  const mapa = {}
+  props.staff.forEach(u => {
+    if (u.role === 'admin') {
+      const cId = u.carreras?.[0]?.id || u.carrera_id
+      if (cId) mapa[cId] = { userId: u.id, name: u.name }
+    }
+  })
+  return mapa
+})
+
+const grupoOcupadoPor = computed(() => {
+  const mapa = {}
+  props.staff.forEach(u => {
+    if (u.role === 'profesor') {
+      const gId = u.grupos?.[0]?.id || u.grupo_id
+      if (gId) mapa[gId] = { userId: u.id, name: u.name }
+    }
+  })
+  return mapa
 })
 
 watch(() => editForm.value.role, (nuevoRol) => {
@@ -93,20 +116,17 @@ async function crearPersonal() {
     await api.post('/master/staff', payload)
     
     modal.value = null
-    staffForm.value = {
-      name: '',
-      email: '',
-      password: '',
-      role: 'profesor',
-      carrera_id: '',
-      grupo_id: ''
-    }
-
     emit('actualizar')
     emit('toast', 'Usuario institucional creado exitosamente.', 'ok')
   } catch (e) {
     console.error('Error al crear personal:', e)
-    const msj = e.response?.data?.message || e.message || 'No se pudo crear el usuario.'
+    const errors = e.response?.data?.errors
+    let msj = e.response?.data?.message || e.message || 'No se pudo crear el usuario.'
+    
+    if (errors) {
+      msj = Object.values(errors).flat().join(' ')
+    }
+    
     emit('toast', msj, 'error')
   }
 }
@@ -139,17 +159,24 @@ async function guardarEdicion() {
     emit('toast', 'Usuario actualizado con éxito', 'ok')
   } catch (error) {
     console.error('Error al actualizar personal:', error)
-    const msj = error.response?.data?.message || error.message || 'Error al actualizar el usuario'
+    const errors = error.response?.data?.errors
+    let msj = error.response?.data?.message || error.message || 'Error al actualizar el usuario'
+    
+    if (errors) {
+      msj = Object.values(errors).flat().join(' ')
+    }
+
     emit('toast', msj, 'error')
   }
 }
 
+
+
 async function eliminarPersonal(u) {
-  if (!confirm(`¿Eliminar a ${u.name}?`)) return
   try {
     await api.delete(`/master/staff/${u.id}`)
     emit('actualizar')
-    emit('toast', 'Usuario eliminado.', 'ok')
+    emit('toast', `Usuario "${u.name}" eliminado correctamente.`, 'ok')
   } catch (e) {
     emit('toast', e.response?.data?.message || 'No se pudo eliminar.', 'error')
   }
@@ -204,8 +231,7 @@ async function eliminarPersonal(u) {
         <label>Nombre <input v-model="staffForm.name" required /></label>
         <label>Correo <input v-model="staffForm.email" type="email" required /></label>
         
-        <!-- Contraseña con botón Ojo -->
-        <label>Contraseña temporal
+        <label>Contraseña
           <div class="password-wrapper">
             <input 
               v-model="staffForm.password" 
@@ -231,7 +257,6 @@ async function eliminarPersonal(u) {
           </div>
         </label>
         
-        <!-- Selector de Rol -->
         <label>Rol 
           <select v-model="staffForm.role">
             <option value="admin">Jefe / Administrador</option>
@@ -239,22 +264,32 @@ async function eliminarPersonal(u) {
           </select>
         </label>
 
-        <!-- Si es Jefe / Administrador -> Muestra Selector de Carrera -->
+        <!-- Selector de Carrera (Deshabilita si ya tiene un Jefe asignado) -->
         <label v-if="staffForm.role === 'admin'">Carrera
           <select v-model="staffForm.carrera_id">
             <option value="">Sin asignar</option>
-            <option v-for="c in props.carreras" :key="c.id" :value="c.id">
-              {{ c.nombre }}
+            <option 
+              v-for="c in props.carreras" 
+              :key="c.id" 
+              :value="c.id"
+              :disabled="!!carreraOcupadaPor[c.id]"
+            >
+              {{ c.nombre }} {{ carreraOcupadaPor[c.id] ? `(Asignado a: ${carreraOcupadaPor[c.id].name})` : '' }}
             </option>
           </select>
         </label>
 
-        <!-- Si es Profesor / Tutor -> Muestra Selector de Grupo -->
+        <!-- Selector de Grupo (Deshabilita si ya tiene un Tutor asignado) -->
         <label v-if="staffForm.role === 'profesor'">Grupo
           <select v-model="staffForm.grupo_id">
             <option value="">Sin asignar</option>
-            <option v-for="g in props.grupos" :key="g.id" :value="g.id">
-              {{ g.nombre }}
+            <option 
+              v-for="g in props.grupos" 
+              :key="g.id" 
+              :value="g.id"
+              :disabled="!!grupoOcupadoPor[g.id]"
+            >
+              {{ g.nombre }} {{ grupoOcupadoPor[g.id] ? `(Asignado a: ${grupoOcupadoPor[g.id].name})` : '' }}
             </option>
           </select>
         </label>
@@ -284,12 +319,17 @@ async function eliminarPersonal(u) {
           </select>
         </label>
 
-        <!-- Asignación dinámica según el Rol -->
+        <!-- Asignación dinámica en edición (Permite seleccionar la carrera actual del usuario editado) -->
         <label v-if="editForm.role === 'admin'">Carrera
           <select v-model="editForm.carrera_id">
             <option value="">Sin asignar</option>
-            <option v-for="c in props.carreras" :key="c.id" :value="c.id">
-              {{ c.nombre }}
+            <option 
+              v-for="c in props.carreras" 
+              :key="c.id" 
+              :value="c.id"
+              :disabled="!!carreraOcupadaPor[c.id] && carreraOcupadaPor[c.id].userId !== editForm.id"
+            >
+              {{ c.nombre }} {{ carreraOcupadaPor[c.id] && carreraOcupadaPor[c.id].userId !== editForm.id ? `(Asignado a: ${carreraOcupadaPor[c.id].name})` : '' }}
             </option>
           </select>
         </label>
@@ -297,8 +337,13 @@ async function eliminarPersonal(u) {
         <label v-if="editForm.role === 'profesor'">Grupo
           <select v-model="editForm.grupo_id">
             <option value="">Sin asignar</option>
-            <option v-for="g in props.grupos" :key="g.id" :value="g.id">
-              {{ g.nombre }}
+            <option 
+              v-for="g in props.grupos" 
+              :key="g.id" 
+              :value="g.id"
+              :disabled="!!grupoOcupadoPor[g.id] && grupoOcupadoPor[g.id].userId !== editForm.id"
+            >
+              {{ g.nombre }} {{ grupoOcupadoPor[g.id] && grupoOcupadoPor[g.id].userId !== editForm.id ? `(Asignado a: ${grupoOcupadoPor[g.id].name})` : '' }}
             </option>
           </select>
         </label>
@@ -309,36 +354,3 @@ async function eliminarPersonal(u) {
 
   </div>
 </template>
-
-<style scoped>
-.password-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-.password-wrapper input {
-  width: 100%;
-  padding-right: 42px;
-}
-
-.eye-btn {
-  position: absolute;
-  right: 10px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #6b7280;
-  border-radius: 4px;
-  transition: color 0.2s;
-}
-
-.eye-btn:hover {
-  color: #111827;
-}
-</style>

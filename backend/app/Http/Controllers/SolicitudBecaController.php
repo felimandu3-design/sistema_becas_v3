@@ -59,25 +59,13 @@ class SolicitudBecaController extends Controller
             ]);
 
             // 3. FILTRADO SEGÚN ROL:
-            if ($usuario->role === 'profesor' && $usuario->grupo_id) {
-                $query->where(function ($q) use ($usuario) {
-                    $q->where('grupo_id', $usuario->grupo_id)
-                      ->orWhereHas('usuario', function ($qUser) use ($usuario) {
-                          $qUser->where('grupo_id', $usuario->grupo_id);
-                      });
-                });
+            // CORREGIDO: Se debe filtrar prioritariamente por el grupo de la SOLICITUD
+            if (in_array($usuario->role, ['profesor', 'tutor'], true) && $usuario->grupo_id) {
+                $query->where('grupo_id', $usuario->grupo_id);
             }
-            // CASO B: Si es Jefe de Carrera / Admin -> Filtra por la CARRERA completa
+            // CASO B: Si es Jefe de Carrera / Admin -> Filtra por la CARRERA de la SOLICITUD
             else if (!empty($carrerasIds)) {
-                $query->where(function ($q) use ($carrerasIds) {
-                    $q->whereIn('carrera_id', $carrerasIds)
-                      ->orWhereHas('usuario', function ($qUser) use ($carrerasIds) {
-                          $qUser->whereIn('carrera_id', $carrerasIds);
-                      })
-                      ->orWhereHas('usuario.grupoRelacion', function ($qGrupo) use ($carrerasIds) {
-                          $qGrupo->whereIn('carrera_id', $carrerasIds);
-                      });
-                });
+                $query->whereIn('carrera_id', $carrerasIds);
             }
 
             $solicitudes = $query->orderByDesc('id')->get();
@@ -123,15 +111,15 @@ class SolicitudBecaController extends Controller
     }
 
     public function confirmarSolicitud($id)
-{
-    $solicitud = Solicitud::findOrFail($id);
-    $solicitud->estado = 'REVISADO_TUTOR'; 
-    $solicitud->save();
+    {
+        $solicitud = Solicitud::findOrFail($id);
+        $solicitud->estado = 'REVISADO_TUTOR'; 
+        $solicitud->save();
 
-    return response()->json([
-        'message' => 'Solicitud confirmada y enviada a Solicitudes Revisadas correctamente.'
-    ]);
-}
+        return response()->json([
+            'message' => 'Solicitud confirmada y enviada a Solicitudes Revisadas correctamente.'
+        ]);
+    }
 
     // DICTAMINAR
     public function dictaminar(Request $request, Solicitud $solicitud) 
@@ -141,9 +129,9 @@ class SolicitudBecaController extends Controller
         }
 
         $validated = $request->validate([
-        'estado' => 'required|string|in:ACEPTADA,RECHAZADA,INCOMPLETA,DOCUMENTACION_INCOMPLETA,EN_REVISION',
-        'porcentaje_beca' => 'nullable|integer|in:25,50,75',
-        'comentario_revision' => 'nullable|string|max:2000',
+            'estado' => 'required|string|in:ACEPTADA,RECHAZADA,INCOMPLETA,DOCUMENTACION_INCOMPLETA,EN_REVISION',
+            'porcentaje_beca' => 'nullable|integer|in:25,50,75',
+            'comentario_revision' => 'nullable|string|max:2000',
         ]);
 
         if ($validated['estado'] === 'ACEPTADA' && empty($validated['porcentaje_beca'])) {
@@ -168,37 +156,38 @@ class SolicitudBecaController extends Controller
 
     // VERIFICAR PERMISO PRIVADO
     private function puedeRevisar(Request $request, Solicitud $solicitud): bool {
-    $usuario = $request->user();
-    
-    if (!$usuario) return false;
-    
-    if ($usuario->role === 'superadmin') return true;
-    
-    if (!in_array($usuario->role, ['admin', 'profesor', 'jefe', 'jefe_carrera', 'tutor'], true)) return false; 
+        $usuario = $request->user();
+        
+        if (!$usuario) return false;
+        
+        if ($usuario->role === 'superadmin') return true;
+        
+        if (!in_array($usuario->role, ['admin', 'profesor', 'jefe', 'jefe_carrera', 'tutor'], true)) return false; 
 
-    if (in_array($usuario->role, ['profesor', 'tutor']) && $usuario->grupo_id) {
-        $grupoSolicitud = $solicitud->grupo_id ?? $solicitud->usuario?->grupo_id;
-        if ((int)$usuario->grupo_id === (int)$grupoSolicitud) {
-            return true;
+        // CORREGIDO: Priorizar siempre el grupo de la solicitud por encima del grupo histórico de la tabla usuarios
+        if (in_array($usuario->role, ['profesor', 'tutor']) && $usuario->grupo_id) {
+            $grupoSolicitud = $solicitud->grupo_id;
+            if ((int)$usuario->grupo_id === (int)$grupoSolicitud) {
+                return true;
+            }
         }
+
+        $carreras = DB::table('asignaciones_carrera')
+            ->where('user_id', $usuario->id)
+            ->pluck('carrera_id')
+            ->map(fn ($id) => (int) $id);
+
+        if ($usuario->carrera_id) {
+            $carreras->push((int) $usuario->carrera_id);
+        }
+
+        $carreraSolicitud = $solicitud->carrera_id;
+
+        return $carreras->contains((int) $carreraSolicitud);
     }
-
-    $carreras = DB::table('asignaciones_carrera')
-        ->where('user_id', $usuario->id)
-        ->pluck('carrera_id')
-        ->map(fn ($id) => (int) $id);
-
-    if ($usuario->carrera_id) {
-        $carreras->push((int) $usuario->carrera_id);
-    }
-
-    $carreraSolicitud = $solicitud->carrera_id ?? $solicitud->usuario?->carrera_id;
-
-    return $carreras->contains((int) $carreraSolicitud);
-}
 
     // ALUMNO: MI SOLICITUD ACTIVA
-public function miSolicitudActiva(Request $request) {
+    public function miSolicitudActiva(Request $request) {
         $solicitud = Solicitud::with(['convocatoria', 'documentos','grupoRelacion','carrera'])
             ->where('user_id', $request->user()->id)
             ->orderByDesc('created_at')->first();
@@ -216,7 +205,6 @@ public function miSolicitudActiva(Request $request) {
         
         return response()->json($solicitud, 200);
     }
-
 
     // ALUMNO: HISTORIAL DE SOLICITUDES
     public function misSolicitudes(Request $request) {
@@ -268,9 +256,11 @@ public function miSolicitudActiva(Request $request) {
             'grupo_id' => $validated['grupo_id'],
         ]);
 
-        if (!$usuario->carrera_id) {
-            $usuario->update(['carrera_id' => $validated['carrera_id'], 'grupo_id' => $validated['grupo_id']]);
-        }
+        // CORREGIDO: Sincronizar SIEMPRE el grupo y la carrera actualizados en la tabla del usuario
+        $usuario->update([
+            'carrera_id' => $validated['carrera_id'], 
+            'grupo_id'   => $validated['grupo_id']
+        ]);
 
         return response()->json([
             'message' => 'Solicitud registrada correctamente.',

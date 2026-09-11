@@ -391,6 +391,7 @@ class ConvocatoriaController extends Controller
     $sheet->setCellValue('B1', 'Alumno');
     $sheet->setCellValue('C1', 'Matrícula');
     $sheet->setCellValue('D1', 'Estado');
+    $sheet->setCellValue('E1', 'Porcentaje'); // <--- Nueva columna
 
     // Llenado seguro sin romper la ejecución por datos nulos
     $row = 2;
@@ -398,10 +399,17 @@ class ConvocatoriaController extends Controller
         // Soporte para relación $sol->usuario o $sol->user
         $usr = $sol->usuario ?? $sol->user ?? null;
 
+        // Obtener el valor del porcentaje
+        $porcentaje = $sol->porcentaje ?? $sol->porcentaje_beca ?? $sol->monto_porcentaje ?? 0;
+
         $sheet->setCellValue('A' . $row, $sol->folio ?? 'N/A');
         $sheet->setCellValue('B' . $row, $usr->name ?? $usr->nombre ?? 'Sin nombre');
         $sheet->setCellValue('C' . $row, $usr->matricula ?? 'Sin matrícula');
         $sheet->setCellValue('D' . $row, $sol->estado ?? $sol->estatus ?? 'Pendiente');
+        
+        // Agregar el porcentaje (Si viene como 50, se muestra "50%"; si es 0.5, se adapta automáticamente)
+        $sheet->setCellValue('E' . $row, is_numeric($porcentaje) ? $porcentaje . '%' : $porcentaje);
+
         $row++;
     }
 

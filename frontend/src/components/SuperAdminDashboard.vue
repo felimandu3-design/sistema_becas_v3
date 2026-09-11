@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import api from '../api/axios'
 
 // 1. IMPORTAMOS A TODOS LOS COMPONENTES HIJOS
@@ -27,10 +27,10 @@ const props = defineProps({
 const emit = defineEmits(['cerrar-sesion'])
 
 /* =========================================================
-   ESTADO PRINCIPAL (EL MOTOR DE DATOS)
+   ESTADO PRINCIPAL
 ========================================================= */
 const seccion = ref('resumen')
-const cargando = ref(true)
+const cargando = ref(false)
 const errorGeneral = ref('')
 const toast = ref(null)
 const modal = ref(null)
@@ -43,6 +43,9 @@ const grupos = ref([])
 const alumnos = ref([])
 const staff = ref([])
 const statsApi = ref({})
+
+// Registro para controlar qué pestañas/recursos ya han sido cargados
+const cargados = ref(new Set())
 
 /* =========================================================
    HELPERS GLOBALES
@@ -75,40 +78,98 @@ function carreraSolicitud(s) {
 function folio(s) { return s?.folio || `BEC-${String(s?.id || 0).padStart(5, '0')}` }
 
 /* =========================================================
-   CARGA DE DATOS DESDE EL BACKEND
+   CARGA OPTIMIZADA POR PESTAÑA (LAZY LOADING)
 ========================================================= */
-async function cargarTodo() {
+
+// Carga selectiva por módulo o pestaña activa
+async function cargarModulo(modulo, forzar = false) {
+  if (!forzar && cargados.value.has(modulo)) return
+
+  try {
+    switch (modulo) {
+      case 'stats': {
+        const res = await api.get('/master/stats')
+        statsApi.value = res.data?.stats || res.data || {}
+        break
+      }
+      case 'solicitudes': {
+        const res = await api.get('/master/solicitudes')
+        solicitudes.value = unwrap(res.data)
+        break
+      }
+      case 'convocatorias': {
+        const res = await api.get('/master/convocatorias')
+        convocatorias.value = unwrap(res.data)
+        break
+      }
+      case 'periodos': {
+        const res = await api.get('/master/periodos')
+        periodos.value = unwrap(res.data)
+        break
+      }
+      case 'carreras': {
+        const res = await api.get('/master/carreras')
+        carreras.value = unwrap(res.data)
+        break
+      }
+      case 'grupos': {
+        const res = await api.get('/master/grupos')
+        grupos.value = unwrap(res.data)
+        break
+      }
+      case 'alumnos': {
+        const res = await api.get('/master/alumnos')
+        alumnos.value = unwrap(res.data)
+        break
+      }
+      case 'staff': {
+        const res = await api.get('/master/staff')
+        staff.value = unwrap(res.data)
+        break
+      }
+    }
+    cargados.value.add(modulo)
+  } catch (e) {
+    console.error(`Error al cargar el módulo: ${modulo}`, e)
+  }
+}
+
+// Evalúa la pestaña activa y descarga solo sus dependencias necesarias
+async function cargarSeccionActual(forzar = false) {
   cargando.value = true
   errorGeneral.value = ''
 
-  const respuestas = await Promise.allSettled([
-    api.get('/master/stats'),
-    api.get('/master/solicitudes'),
-    api.get('/master/convocatorias'),
-    api.get('/master/periodos'),
-    api.get('/master/carreras'),
-    api.get('/master/grupos'),
-    api.get('/master/alumnos'),
-    api.get('/master/staff')
-  ])
-
-  const [rStats, rSolicitudes, rConvocatorias, rPeriodos, rCarreras, rGrupos, rAlumnos, rStaff] = respuestas
-
-  if (rStats.status === 'fulfilled') statsApi.value = rStats.value.data?.stats || rStats.value.data || {}
-  if (rSolicitudes.status === 'fulfilled') solicitudes.value = unwrap(rSolicitudes.value.data)
-  if (rConvocatorias.status === 'fulfilled') convocatorias.value = unwrap(rConvocatorias.value.data)
-  if (rPeriodos.status === 'fulfilled') periodos.value = unwrap(rPeriodos.value.data)
-  if (rCarreras.status === 'fulfilled') carreras.value = unwrap(rCarreras.value.data)
-  if (rGrupos.status === 'fulfilled') grupos.value = unwrap(rGrupos.value.data)
-  if (rAlumnos.status === 'fulfilled') alumnos.value = unwrap(rAlumnos.value.data)
-  if (rStaff.status === 'fulfilled') staff.value = unwrap(rStaff.value.data)
-
-  const fallidos = respuestas.filter(r => r.status === 'rejected')
-  if (fallidos.length) {
-    errorGeneral.value = `${fallidos.length} módulo(s) no respondieron. El resto sigue disponible.`
+  const mapeoPestanas = {
+    resumen: ['stats', 'solicitudes', 'alumnos', 'convocatorias', 'periodos'],
+    solicitudes: ['solicitudes', 'periodos', 'carreras', 'convocatorias'],
+    convocatorias: ['convocatorias', 'periodos'],
+    periodos: ['periodos'],
+    carreras: ['carreras', 'alumnos', 'grupos'],
+    grupos: ['grupos', 'carreras', 'periodos', 'staff', 'alumnos'],
+    alumnos: ['alumnos', 'carreras', 'grupos'],
+    personal: ['staff', 'carreras', 'grupos'],
+    alertas: ['solicitudes', 'alumnos', 'periodos', 'convocatorias']
   }
+
+  const modulosNecesarios = mapeoPestanas[seccion.value] || []
+  await Promise.allSettled(modulosNecesarios.map(m => cargarModulo(m, forzar)))
+
   cargando.value = false
 }
+
+// Recarga manual al hacer ediciones, eliminaciones o guardar
+async function cargarTodo() {
+  await cargarSeccionActual(true)
+}
+
+// Escucha los cambios de pestaña para cargar dinámicamente
+watch(seccion, () => {
+  cargarSeccionActual()
+})
+
+onMounted(() => {
+  cargarSeccionActual()
+})
 
 /* =========================================================
    SISTEMA DE ALERTAS (Para Topbar y Pestaña Alertas)
@@ -119,7 +180,6 @@ const convocatoriaVigente = computed(() => convocatorias.value.find(c => estado(
 const alertas = computed(() => {
   const lista = []
   
-  // Contamos directamente para no depender de la pestaña de resumen
   const pendientes = solicitudes.value.filter(s => estado(s.estado || s.estatus) === 'PENDIENTE').length
   const incompletas = solicitudes.value.filter(s => estado(s.estado || s.estatus) === 'DOCUMENTACION_INCOMPLETA').length
 
@@ -132,8 +192,12 @@ const alertas = computed(() => {
   const sinGrupo = alumnos.value.filter(a => !a.grupo_id && !a.grupo).length
   if (sinGrupo) lista.push({ tipo: 'warning', titulo: 'Alumnos sin grupo', detalle: `${sinGrupo} alumnos necesitan grupo.`, destino: 'alumnos' })
 
-  if (!periodoActivo.value) lista.push({ tipo: 'danger', titulo: 'Sin periodo activo', detalle: 'El sistema no tiene un periodo académico activo.', destino: 'periodos' })
-  if (!convocatoriaVigente.value) lista.push({ tipo: 'info', titulo: 'Sin convocatoria vigente', detalle: 'No existe una convocatoria publicada actualmente.', destino: 'convocatorias' })
+  if (cargados.value.has('periodos') && !periodoActivo.value) {
+    lista.push({ tipo: 'danger', titulo: 'Sin periodo activo', detalle: 'El sistema no tiene un periodo académico activo.', destino: 'periodos' })
+  }
+  if (cargados.value.has('convocatorias') && !convocatoriaVigente.value) {
+    lista.push({ tipo: 'info', titulo: 'Sin convocatoria vigente', detalle: 'No existe una convocatoria publicada actualmente.', destino: 'convocatorias' })
+  }
 
   return lista
 })
@@ -141,12 +205,12 @@ const alertas = computed(() => {
 /* =========================================================
    LÓGICA COMPARTIDA DE MODALES GLOBALES
 ========================================================= */
-// Modal Solicitud
 const solicitudSeleccionada = ref(null)
 function abrirSolicitud(s) {
   solicitudSeleccionada.value = s
   modal.value = 'solicitud'
 }
+
 async function actualizarSolicitud(nuevoEstado) {
   try {
     await api.patch(`/master/solicitudes/${solicitudSeleccionada.value.id}/estatus`, { estado: nuevoEstado })
@@ -190,8 +254,6 @@ async function restablecerPassword() {
 
 function cerrarSesion() { emit('cerrar-sesion') }
 
-onMounted(cargarTodo)
-
 /* =========================================================
    PUBLICACIÓN MASIVA DE RESULTADOS
 ========================================================= */
@@ -199,16 +261,11 @@ const publicandoResultados = ref(false)
 
 async function publicarResultados(convocatoriaId) {
   if (!convocatoriaId) return
-  
-  if (!confirm('¿Estás seguro de publicar los resultados? Al aceptar, todos los alumnos verán si fueron aceptados o rechazados y su porcentaje.')) {
-    return
-  }
 
   publicandoResultados.value = true
   try {
     const { data } = await api.post(`/master/convocatorias/${convocatoriaId}/publicar-resultados`)
-    
-    mostrarToast(data.message || 'Resultados publicados correctamente.')
+    mostrarToast(data.message || 'Resultados publicados correctamente.', 'ok')
     await cargarTodo()
   } catch (e) {
     const msg = e.response?.data?.message || 'Ocurrió un error al publicar las resoluciones.'
@@ -223,34 +280,51 @@ async function publicarResultados(convocatoriaId) {
 ========================================================= */
 const descargandoExcel = ref(false)
 
-async function descargarExcel(convocatoriaId) {
-  if (!convocatoriaId) return
-  
+async function descargarExcel(filtros) {
   descargandoExcel.value = true
-  mostrarToast('Generando Excel, por favor espera...', 'info')
-
   try {
-    const response = await api.get(`/master/convocatorias/${convocatoriaId}/exportar-excel`, {
-      responseType: 'blob' 
+    const { convocatoria_id, ...params } = filtros
+
+    const response = await api.get(`/master/convocatorias/${convocatoria_id}/exportar-excel`, {
+      params,
+      responseType: 'blob'
     })
 
-    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const blob = new Blob([response.data], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    })
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', `Padron_Becarios_${convocatoriaId}.xlsx`)
+    link.setAttribute('download', `padron_convocatoria_${convocatoria_id}.xlsx`)
     document.body.appendChild(link)
     link.click()
-    
     link.remove()
     window.URL.revokeObjectURL(url)
-    mostrarToast('Excel descargado correctamente.', 'success')
-  } catch (e) {
-    mostrarToast('Ocurrió un error al generar el Excel.', 'error')
+  } catch (error) {
+    console.error('Error al exportar el archivo Excel:', error)
   } finally {
     descargandoExcel.value = false
   }
 }
 
+function resolverUrlDocumento(doc) {
+  if (!doc) return '#'
+  
+  const ruta = doc.url || doc.ruta_archivo || doc.path || ''
+  if (ruta.startsWith('http://') || ruta.startsWith('https://')) {
+    return ruta
+  }
+
+  const baseURL = api.defaults.baseURL ? api.defaults.baseURL.replace(/\/api\/?$/, '') : 'http://127.0.0.1:8000'
+  const rutaLimpia = ruta.startsWith('/') ? ruta : `/${ruta}`
+  
+  if (!rutaLimpia.startsWith('/storage/') && !rutaLimpia.startsWith('/uploads/')) {
+    return `${baseURL}/storage${rutaLimpia}`
+  }
+
+  return `${baseURL}${rutaLimpia}`
+}
 </script>
 
 <template>
@@ -402,24 +476,65 @@ async function descargarExcel(convocatoriaId) {
   </main>
 
   <!-- MODALES GLOBALES) -->
-  <div v-if="modal === 'solicitud'" class="overlay" @click.self="modal = null">
-    <div class="modal">
-      <button class="close" @click="modal = null">×</button>
-      <span class="eyebrow">EXPEDIENTE</span>
-      <h2>{{ alumnoDe(solicitudSeleccionada).name }}</h2>
-      <p>{{ folio(solicitudSeleccionada) }} · {{ carreraSolicitud(solicitudSeleccionada) }}</p>
+<div v-if="modal === 'solicitud' && solicitudSeleccionada" class="overlay" @click.self="modal = null">
+  <div class="modal">
+    <button class="close" @click="modal = null">×</button>
+    
+    <span class="eyebrow">EXPEDIENTE DIGITAL</span>
+    <h2 style="margin-top: 4px; margin-bottom: 2px;">
+      {{ alumnoDe(solicitudSeleccionada).name || 'Alumno' }}
+    </h2>
+    <p style="margin-top: 0; color: #64748b; font-size: 13px;">
+      Folio: <strong>{{ folio(solicitudSeleccionada) }}</strong> | 
+      Matrícula: <strong>{{ alumnoDe(solicitudSeleccionada).matricula || 'N/A' }}</strong>
+    </p>
 
-      <label>Estado
-        <select :value="estado(solicitudSeleccionada.estado || solicitudSeleccionada.estatus)" @change="actualizarSolicitud($event.target.value)">
-          <option value="PENDIENTE">Pendiente</option>
-          <option value="EN_REVISION">En revisión</option>
-          <option value="DOCUMENTACION_INCOMPLETA">Documentación incompleta</option>
-          <option value="ACEPTADA">Aceptada</option>
-          <option value="RECHAZADA">Rechazada</option>
-        </select>
-      </label>
+    <hr style="border: 0; border-top: 1px solid #edf1ee; margin: 15px 0;" />
+
+    <div>
+      <h3 style="font-size: 14px; color: #27312b; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+        📄 Archivos / Comprobantes Enviados
+      </h3>
+
+      <div 
+        v-if="solicitudSeleccionada.documentos && solicitudSeleccionada.documentos.length > 0" 
+        style="display: flex; flex-direction: column; gap: 10px;"
+      >
+        <div 
+          v-for="doc in solicitudSeleccionada.documentos" 
+          :key="doc.id" 
+          style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;"
+        >
+          <div style="display: flex; flex-direction: column; gap: 2px; text-align: left;">
+            <strong style="font-size: 13px; color: #1e293b; font-weight: 700;">
+              {{ doc.tipo || doc.nombre_tipo || 'Documento adjunto' }}
+            </strong>
+            <small style="color: #64748b; font-size: 11px; display: block; word-break: break-all;">
+              {{ doc.nombre_original || doc.ruta_archivo }}
+            </small>
+          </div>
+
+          <a 
+            :href="resolverUrlDocumento(doc)" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            style="display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; background: #ffffff; border: 1px solid #10b981; border-radius: 6px; color: #059669; font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap;"
+          >
+            <span>Ver archivo</span>
+            <span style="font-size: 11px;">↗</span>
+          </a>
+        </div>
+      </div>
+
+      <div 
+        v-else 
+        style="padding: 16px; background: #fffbebfb; border: 1px solid #fef3c7; border-radius: 8px; color: #b45309; font-size: 12px; text-align: center;"
+      >
+        ⚠️ Esta solicitud no contiene archivos o documentos adjuntos.
+      </div>
     </div>
   </div>
+</div>
 
   <div v-if="modal === 'reset'" class="overlay" @click.self="modal = null">
     <form class="modal" @submit.prevent="restablecerPassword">

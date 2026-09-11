@@ -42,11 +42,10 @@ async function guardarCarrera() {
 }
 
 async function eliminarCarrera(c) {
-  if (!confirm(`¿Eliminar la carrera "${c.nombre}"?`)) return
   try {
     await api.delete(`/master/carreras/${c.id}`)
     emit('actualizar')
-    emit('toast', 'Carrera eliminada.', 'ok')
+    emit('toast', `Carrera "${c.nombre}" eliminada correctamente.`, 'ok')
   } catch (e) {
     emit('toast', e.response?.data?.message || 'No puede eliminarse. Prueba marcarla como inactiva.', 'error')
   }

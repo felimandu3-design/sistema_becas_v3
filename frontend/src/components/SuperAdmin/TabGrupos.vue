@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import api from '../../api/axios'
 
 const props = defineProps({
@@ -49,15 +49,29 @@ async function guardarGrupo() {
 }
 
 async function eliminarGrupo(g) {
-  if (!confirm(`¿Eliminar el grupo "${g.nombre}"?`)) return
   try {
     await api.delete(`/master/grupos/${g.id}`)
     emit('actualizar')
-    emit('toast', 'Grupo eliminado.', 'ok')
+    emit('toast', `Grupo "${g.nombre}" eliminado correctamente.`, 'ok')
   } catch (e) {
-    emit('toast', e.response?.data?.message || 'El grupo tiene alumnos asignados.', 'error')
+    emit('toast', e.response?.data?.message || 'El grupo tiene alumnos asignados y no se puede eliminar.', 'error')
   }
 }
+
+  const profesoresDisponibles = computed(() => {
+  const profesores = props.staff.filter(u => u.role === 'profesor')
+  
+  const tutoresOcupados = props.grupos
+    .filter(g => String(g.id) !== String(grupoForm.value.id)) 
+    .map(g => String(g.tutor_id))
+    .filter(Boolean)
+
+  return profesores.map(p => ({
+    ...p,
+    ocupado: tutoresOcupados.includes(String(p.id))
+  }))
+})
+
 </script>
 
 <template>
@@ -125,11 +139,18 @@ async function eliminarGrupo(g) {
             </select>
           </label>
           <label>Profesor 
-            <select v-model="grupoForm.tutor_id">
-              <option value="">Sin Profesor</option>
-              <option v-for="u in props.staff.filter(u => u.role === 'profesor')" :key="u.id" :value="u.id">{{ u.name }}</option>
-            </select>
-          </label>
+  <select v-model="grupoForm.tutor_id">
+    <option value="">Sin Profesor</option>
+    <option 
+      v-for="u in profesoresDisponibles" 
+      :key="u.id" 
+      :value="u.id"
+      :disabled="u.ocupado && String(u.id) !== String(grupoForm.tutor_id)"
+    >
+      {{ u.name }} {{ u.ocupado && String(u.id) !== String(grupoForm.tutor_id) ? '(Ocupado en otro grupo)' : '' }}
+    </option>
+  </select>
+</label>
           <label>Cuatrimestre <input v-model="grupoForm.cuatrimestre" type="number" min="1" max="12" /></label>
           <label>Turno 
             <select v-model="grupoForm.turno">
